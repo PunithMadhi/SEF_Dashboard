@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SPARC Coach View</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20rx%3D%2222%22%20fill%3D%22%23E0602E%22/%3E%3Cpath%20d%3D%22M60.7%2030.1A26%2026%200%201%200%2060.7%2069.9%22%20fill%3D%22none%22%20stroke%3D%22%23FBF1E6%22%20stroke-width%3D%2215%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M73%2044Q74.6%2051.4%2082%2053Q74.6%2054.6%2073%2062Q71.4%2054.6%2064%2053Q71.4%2051.4%2073%2044Z%22%20fill%3D%22%23F4A93A%22/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
@@ -618,7 +619,7 @@ function App() {
   return <div className="min-h-full bg-[#E9EDF2] md:py-6">
     {/* prototype controls: outside the phone, not part of the app */}
     <div className="gutter md:mb-5 bg-white md:bg-transparent border-b border-line md:border-0 py-2.5">
-      <div className="max-w-[1200px] mx-auto flex flex-wrap items-end gap-3">
+      <div className="max-w-[1200px] mx-auto flex flex-wrap items-center gap-3">
         <div className="hidden md:block mr-auto"><div className="font-cond text-[18px] font-semibold text-navy leading-tight">SPARC – Individual Coach View</div>
           <div className="text-[12px] text-muted">Mobile prototype · <span className="text-[#8A5600] font-semibold">DEMO DATA</span> · the selectors here exist only in the prototype</div></div>
         <Sel id="f-district" label="District" value={district} onChange={v => { const d = Number(v); setDistrict(d); setCoach(DB.districts[d].coaches[0]); }}>{DB.districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
@@ -629,11 +630,11 @@ function App() {
     </div>
     {/* the phone */}
     <div className="mx-auto w-full md:w-[392px] md:h-[min(852px,calc(100vh-130px))] md:min-h-[640px] md:rounded-[44px] md:border-[10px] md:border-[#0E1A2B] md:shadow-[0_24px_60px_rgba(11,27,51,0.28)] bg-canvas md:overflow-hidden flex flex-col relative">
-      <header className="sticky md:static top-0 z-30 bg-navy text-white px-4 pt-3 pb-3 md:pt-5" style={{ paddingTop: 'max(12px, env(safe-area-inset-top, 0px))' }}>
+      <header className="sticky md:static top-0 z-30 bg-[#C9501C] text-white px-4 pt-3 pb-3 md:pt-5" style={{ paddingTop: 'max(12px, env(safe-area-inset-top, 0px))' }}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-[#7FD3D8] text-navy grid place-items-center shrink-0 font-cond font-semibold">{c.code.slice(-2)}</div>
-          <div className="min-w-0 flex-1"><div className="text-[16px] font-semibold leading-tight">{c.code}</div><div className="text-[11.5px] text-white/70 truncate">{DB.districts[c.district].name} · {DB.blocks[c.block].short} · {q.short}</div></div>
-          <div className="text-right text-[10.5px] text-white/70 leading-tight"><div className="inline-flex items-center gap-1"><Icon name={unsynced.length ? 'CloudOff' : 'Cloud'} size={13} />{unsynced.length ? `${unsynced.length} unsynced` : 'Synced'}</div><div>{live ? 'Updated' : 'Closed'} {fmtShort(asOf)}</div></div>
+          <div className="w-10 h-10 rounded-full bg-[#FBF1E6] text-[#C9501C] grid place-items-center shrink-0 font-cond font-semibold">{c.code.slice(-2)}</div>
+          <div className="min-w-0 flex-1"><div className="text-[16px] font-semibold leading-tight">{c.code}</div><div className="text-[11.5px] text-white/90 truncate">{DB.districts[c.district].name} · {DB.blocks[c.block].short} · {q.short}</div></div>
+          <div className="text-right text-[10.5px] text-white/90 leading-tight"><div className="inline-flex items-center gap-1"><Icon name={unsynced.length ? 'CloudOff' : 'Cloud'} size={13} />{unsynced.length ? `${unsynced.length} unsynced` : 'Synced'}</div><div>{live ? 'Updated' : 'Closed'} {fmtShort(asOf)}</div></div>
         </div>
       </header>
       <main id="app-scroll" className="flex-1 md:overflow-y-auto px-3.5 pt-3.5 pb-24 md:pb-4">
@@ -657,8 +658,8 @@ function App() {
   </div>;
 }
 function Sel({ id, label, value, onChange, children }) {
-  return <label htmlFor={id} className="flex flex-col gap-0.5 min-w-0">
-    <span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">{label}</span>
+  return <label htmlFor={id} className="min-w-0">
+    <span className="sr-only">{label}</span>
     <select id={id} value={value} onChange={e => onChange(e.target.value)} className="h-8 rounded border border-line bg-white px-2 text-[12.5px] text-ink min-w-[120px]">{children}</select>
   </label>;
 }

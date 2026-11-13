@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SPARC SEF Internal Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20rx%3D%2222%22%20fill%3D%22%23E0602E%22/%3E%3Cpath%20d%3D%22M60.7%2030.1A26%2026%200%201%200%2060.7%2069.9%22%20fill%3D%22none%22%20stroke%3D%22%23FBF1E6%22%20stroke-width%3D%2215%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M73%2044Q74.6%2051.4%2082%2053Q74.6%2054.6%2073%2062Q71.4%2054.6%2064%2053Q71.4%2051.4%2073%2044Z%22%20fill%3D%22%23F4A93A%22/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
@@ -598,12 +599,8 @@ const SEF_IDEAL = 70;
 const PAGES = [
   { key: 'overview', label: 'Overview', icon: 'LayoutDashboard' },
   { key: 'coverage', label: 'Coverage & Caseload', icon: 'Users' },
-  { key: 'distribution', label: 'Observation Distribution', icon: 'BarChart3' },
   { key: 'competency', label: 'Teacher Competencies', icon: 'Award' },
-  { key: 'change', label: 'Rating Change', icon: 'TrendingUp' },
   { key: 'engagement', label: 'Student Engagement', icon: 'MessagesSquare' },
-  { key: 'activity', label: 'Coach Activity', icon: 'UserX' },
-  { key: 'sef', label: 'SEF Co-observation', icon: 'ClipboardCheck' },
 ];
 const pageFromHash = () => { const h = (location.hash || '').replace('#', ''); return PAGES.some(p => p.key === h) ? h : 'overview'; };
 
@@ -678,8 +675,8 @@ function App() {
   return <div className="min-h-full">
     <Header {...{ view, setView, periodKey, setPeriodKey, periods, custom, setCustom, district, setDistrict, block, setBlock: setBlock0, coach, setCoach, setShowSettings, win, resetAll, isDefault }} />
     <nav className="gutter bg-white border-b border-line sticky z-30" style={{ top: 'env(safe-area-inset-top,0px)' }}>
-      <div className="flex gap-1 overflow-x-auto -mb-px">
-        {PAGES.map(p => <button key={p.key} onClick={() => go(p.key)} className={`flex items-center gap-1.5 px-3 py-2.5 text-[13px] whitespace-nowrap border-b-2 ${page === p.key ? 'border-teal text-navy font-semibold' : 'border-transparent text-muted hover:text-ink'}`}><Icon name={p.icon} size={15} />{p.label}</button>)}
+      <div className="flex gap-1.5 overflow-x-auto py-2">
+        {PAGES.map(p => <button key={p.key} onClick={() => go(p.key)} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] whitespace-nowrap ${page === p.key ? 'bg-navy text-white font-semibold' : 'text-muted hover:text-ink hover:bg-canvas'}`}><Icon name={p.icon} size={15} />{p.label}</button>)}
       </div>
     </nav>
     <div className="gutter py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
@@ -696,12 +693,8 @@ function App() {
     <main className="gutter pb-10 pt-1">
       {page === 'overview' && <OverviewPage {...shared} />}
       {page === 'coverage' && <CoveragePage {...shared} />}
-      {page === 'distribution' && <DistributionPage {...shared} />}
       {page === 'competency' && <CompetencyPage {...shared} />}
-      {page === 'change' && <ChangePage {...shared} />}
       {page === 'engagement' && <EngagementPage {...shared} />}
-      {page === 'activity' && <ActivityPage {...shared} />}
-      {page === 'sef' && <SefPage {...shared} />}
     </main>
     <DemoFooter sheet="3. SEF Internal (KF review copy)" />
     {showSettings && <SettingsModal settings={settings} onClose={() => setShowSettings(false)} onSave={s => { setSettings(s); setShowSettings(false); }} />}
@@ -710,8 +703,8 @@ function App() {
 
 /* ---------------- Header ---------------- */
 function Sel({ id, label, value, onChange, children, disabled }) {
-  return <label htmlFor={id} className="flex flex-col gap-0.5 min-w-0">
-    <span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">{label}</span>
+  return <label htmlFor={id} className="min-w-0">
+    <span className="sr-only">{label}</span>
     <select id={id} value={value} disabled={disabled} onChange={e => onChange(e.target.value)} className="h-8 rounded border border-line bg-white px-2 text-[12.5px] text-ink disabled:bg-[#F3F5F8] disabled:text-muted min-w-[120px]">{children}</select>
   </label>;
 }
@@ -720,35 +713,34 @@ function Header({ view, setView, periodKey, setPeriodKey, periods, custom, setCu
   const setRange = (a0, b0) => { if (isNaN(a0) || isNaN(b0)) return; const a = Math.max(0, Math.min(a0, ASOF)), b = Math.max(0, Math.min(b0, ASOF)); setCustom({ from: Math.min(a, b), to: Math.max(a, b) }); };
   const coachOpts = district === '' ? [] : DB.districts[district].coaches.filter(c => block === '' || DB.coaches[c].block === block);
   return <header>
-    <div className="gutter bg-navy text-white py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+    <div className="gutter bg-[#C9501C] text-white py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-9 h-9 rounded bg-white/10 grid place-items-center shrink-0"><Icon name="Activity" size={20} className="text-[#7FD3D8]" /></div>
+        <svg viewBox="0 0 100 100" className="w-9 h-9 shrink-0 rounded-[8px] ring-2 ring-[#FBF1E6]" role="img" aria-label="SPARC logo"><rect width="100" height="100" rx="22" fill="#E0602E"/><path d="M60.7 30.1A26 26 0 1 0 60.7 69.9" fill="none" stroke="#FBF1E6" strokeWidth="15" strokeLinecap="round"/><path d="M73 44Q74.6 51.4 82 53Q74.6 54.6 73 62Q71.4 54.6 64 53Q71.4 51.4 73 44Z" fill="#F4A93A"/></svg>
         <div className="min-w-0"><h1 className="font-cond text-[19px] sm:text-[21px] font-semibold leading-tight">SPARC – SEF Internal Programme Dashboard</h1>
-          <div className="text-[12px] text-white/70">SEF Leadership & Programme Head View · Punjab · FY 2026-27</div></div>
+          <div className="text-[12px] text-white/90">SEF Leadership & Programme Head View · Punjab · FY 2026-27</div></div>
       </div>
       <div className="ml-auto flex items-center gap-3 text-[12px]">
         <span className="hidden sm:inline-flex items-center gap-1.5 rounded bg-[#F2B544] text-[#3D2A00] font-semibold px-2 py-1 text-[11px] tracking-wide"><Icon name="FlaskConical" size={13} />DEMO DATA</span>
-        <span className="text-white/75 inline-flex items-center gap-1.5"><Icon name="RefreshCw" size={13} />Last updated <b className="text-white font-medium">{fmtDay(ASOF)}</b></span>
-        <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-1.5 rounded border border-white/25 px-2.5 py-1.5 hover:bg-white/10"><Icon name="SlidersHorizontal" size={14} />Targets</button>
+        <span className="text-white/90 inline-flex items-center gap-1.5"><Icon name="RefreshCw" size={13} />Last updated <b className="text-white font-medium">{fmtDay(ASOF)}</b></span>
+        <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-1.5 rounded border border-white/50 px-2.5 py-1.5 hover:bg-white/10"><Icon name="SlidersHorizontal" size={14} />Targets</button>
       </div>
     </div>
-    <div className="gutter bg-white border-b border-line py-2.5 flex flex-wrap items-end gap-3">
-      <Sel id="f-state" label="State" value="PB" onChange={() => {}}><option value="PB">Punjab</option></Sel>
+    <div className="gutter bg-white border-b border-line py-2.5 flex flex-wrap items-center gap-3">
       <Sel id="f-district" label="District" value={district} onChange={v => { setDistrict(v === '' ? '' : Number(v)); setBlock(''); setCoach(''); }}>
         <option value="">All districts</option>{DB.districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
       <Sel id="f-block" label="Block" value={block} disabled={district === ''} onChange={v => { setBlock(v === '' ? '' : Number(v)); setCoach(''); }}>
         <option value="">All blocks</option>{district !== '' && DB.districts[district].blocks.map(b => <option key={b} value={b}>{DB.blocks[b].short}</option>)}</Sel>
       <Sel id="f-coach" label="Coach ID" value={coach} disabled={district === ''} onChange={v => { const c = v === '' ? '' : Number(v); setCoach(c); if (c !== '') setBlock(DB.coaches[c].block); }}>
         <option value="">{district === '' ? 'Select a district' : 'All coaches'}</option>{coachOpts.map(c => <option key={c} value={c}>{DB.coaches[c].code}</option>)}</Sel>
-      <div className="flex flex-col gap-0.5"><span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">View</span>
+      <div>
         <div className="inline-flex h-8 rounded border border-line overflow-hidden" role="group" aria-label="Monthly or quarterly view">
           {[['M', 'Monthly'], ['Q', 'Quarterly']].map(([k, l]) => <button key={k} onClick={() => { setView(k); setCustom(null); setPeriodKey(k === 'Q' ? 'Q3' : 'M11'); }} className={`px-3 text-[12.5px] ${view === k && !custom ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-canvas'}`}>{l}</button>)}
         </div></div>
       <Sel id="f-period" label="Reporting period" value={custom ? 'custom' : periodKey} onChange={v => { if (v === 'custom') setCustom({ from: win.from, to: win.to }); else { setCustom(null); setPeriodKey(v); } }}>
         {periods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}<option value="custom">Custom range…</option></Sel>
-      {custom && <><label htmlFor="f-from" className="flex flex-col gap-0.5"><span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">From</span>
+      {custom && <><label htmlFor="f-from" className="inline-flex items-center gap-1.5"><span className="text-[12.5px] text-muted">From</span>
         <input id="f-from" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(from)} onChange={e => e.target.value && setRange(toDay(e.target.value), to)} className="h-8 rounded border border-line px-2 text-[12.5px]" /></label>
-        <label htmlFor="f-to" className="flex flex-col gap-0.5"><span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">To</span>
+        <label htmlFor="f-to" className="inline-flex items-center gap-1.5"><span className="text-[12.5px] text-muted">To</span>
         <input id="f-to" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(to)} onChange={e => e.target.value && setRange(from, toDay(e.target.value))} className="h-8 rounded border border-line px-2 text-[12.5px]" /></label></>}
       <button type="button" onClick={resetAll} disabled={isDefault} className="h-8 inline-flex items-center gap-1.5 rounded border border-line bg-white px-3 text-[12.5px] text-ink hover:bg-canvas hover:border-teal disabled:opacity-40 disabled:cursor-not-allowed"><Icon name="RotateCcw" size={14} />Reset filters</button>
     </div>
@@ -846,19 +838,19 @@ function OverviewPage(p) {
   return <div className="flex flex-col gap-5">
     <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
       <KpiCard title="Teacher coverage" value={f1(S.cov)} status={st.cov} onClick={() => go('coverage')} sub={<><b className="text-ink num">{nf(S.m.teachersObserved)}</b> of <b className="text-ink num">{nf(S.m.teachersAllotted)}</b> allotted teachers observed</>} targetLabel={complete ? '100%' : `pace ${f0(pace)}`} delta={<Delta cur={S.cov} prev={P && P.cov} label={vs} />} />
-      <KpiCard title="Observations per teacher" value={S.fyMean == null ? '—' : S.fyMean.toFixed(2)} unitNote="FY to date" status={st.dist} onClick={() => go('distribution')} sub={<>{f0(S.m.distAllotted ? (100 * S.m.dist[0]) / S.m.distAllotted : null)} of teachers had no observation this period</>} targetLabel={`${settings.annualTarget}/yr · pace ${fyPace.toFixed(1)}`} delta={null} />
+      <KpiCard title="Observations per teacher" value={S.fyMean == null ? '—' : S.fyMean.toFixed(2)} unitNote="FY to date" status={st.dist} sub={<>{f0(S.m.distAllotted ? (100 * S.m.dist[0]) / S.m.distAllotted : null)} of teachers had no observation this period</>} targetLabel={`${settings.annualTarget}/yr · pace ${fyPace.toFixed(1)}`} delta={null} />
       <KpiCard title="Competency benchmark" value={S.m.compLow ? f1(S.m.compLow.v) : '—'} unitNote={S.m.compLow ? `lowest · ${Q_LABEL[S.m.compLow.q]}` : ''} status={st.comp} onClick={() => go('competency')} sub={S.m.compLow ? <>Q1–Q8 range {f0(S.m.compLow.v)}–{f0(S.m.compMax)}</> : 'No valid observations'} targetLabel={t == null ? 'X%' : `${t}%`} delta={<Delta cur={S.m.compLow && S.m.compLow.v} prev={P && P.m.compLow && P.m.compLow.v} label={vs} />} />
       <KpiCard title="Student engagement" value={f1(S.m.eng)} status={st.eng} onClick={() => go('engagement')} sub={<><b className="text-ink num">{nf(S.m.engMet)}</b> of <b className="text-ink num">{nf(S.m.engDen)}</b> teachers meet ≥2 of Q9–Q11</>} targetLabel={te == null ? 'X%' : `${te}%`} delta={<Delta cur={S.m.eng} prev={P && P.m.eng} label={vs} />} />
       <KpiCard title="Teachers per coach" value={S.load == null ? '—' : Math.round(S.load)} unitNote="average caseload" status={settings.caseloadMax != null && S.load > settings.caseloadMax ? 'red' : 'grey'} onClick={() => go('coverage')} sub={<><b className="text-ink num">{nf(S.coaches)}</b> active coaches · {nf(S.m.distAllotted)} allotted teachers</>} targetLabel="capacity input" delta={null} />
-      <KpiCard title="Coaches idle 14 days" value={nf(S.idle)} unitNote={`of ${nf(S.elig)} (${f1(S.idlePct)})`} status={st.idle} onClick={() => go('activity')} sub={level === 'district' ? 'Select a district for the named list' : 'Named list on the Coach Activity page'} targetLabel={`0 (≤${settings.inactiveThreshold})`} delta={null} />
-      <KpiCard title="Rating change (Q1–Q8)" value={S.chg ? sgn(S.chg.mean) : '—'} unitNote="mean levels" status={st.chg} onClick={() => go('change')} sub={S.chg ? <><b className="text-ink num">{f0(S.chg.up)}</b> of {nf(S.chg.n)} matched ratings improved</> : 'No matched ratings'} targetLabel="No target" delta={null} />
-      <KpiCard title="SEF vs coach agreement" value={S.sef.n ? f1(S.sef.rate) : '—'} status={st.sef} onClick={() => go('sef')} sub={<><b className="text-ink num">{nf(S.sef.co)}</b> co-observations · {nf(S.sef.n)} matched ratings</>} targetLabel={settings.sefTarget == null ? 'ideal 70%' : `${settings.sefTarget}%`} delta={<Delta cur={S.sef.n ? S.sef.rate : null} prev={P && P.sef.n ? P.sef.rate : null} label={vs} />} />
+      <KpiCard title="Coaches idle 14 days" value={nf(S.idle)} unitNote={`of ${nf(S.elig)} (${f1(S.idlePct)})`} status={st.idle} targetLabel={`0 (≤${settings.inactiveThreshold})`} delta={null} />
+      <KpiCard title="Rating change (Q1–Q8)" value={S.chg ? sgn(S.chg.mean) : '—'} unitNote="mean levels" status={st.chg} sub={S.chg ? <><b className="text-ink num">{f0(S.chg.up)}</b> of {nf(S.chg.n)} matched ratings improved</> : 'No matched ratings'} targetLabel="No target" delta={null} />
+      <KpiCard title="SEF vs coach agreement" value={S.sef.n ? f1(S.sef.rate) : '—'} status={st.sef} sub={<><b className="text-ink num">{nf(S.sef.co)}</b> co-observations · {nf(S.sef.n)} matched ratings</>} targetLabel={settings.sefTarget == null ? 'ideal 70%' : `${settings.sefTarget}%`} delta={<Delta cur={S.sef.n ? S.sef.rate : null} prev={P && P.sef.n ? P.sef.rate : null} label={vs} />} />
     </div>
     <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
       <Panel title={`Teacher coverage by ${lvl.toLowerCase()}`} formula={`${KPI.cov.formula} ${KPI.cov.action}`} right={<button onClick={() => go('coverage')} className="text-[12px] text-teal hover:underline inline-flex items-center gap-1">Details <Icon name="ArrowRight" size={13} /></button>}>
         <VCol rows={covRows} target={pace} targetLabel={complete ? 'Target 100%' : `Pace ${f0(pace)}`} onSelect={drill} />{legend(false)}
       </Panel>
-      <Panel title={`Observations per teacher by ${lvl.toLowerCase()}`} formula={`Average observations per allotted teacher this financial year (1 Apr to ${fmtDay(p.asOf)}), against the pace towards ${settings.annualTarget} a year (${fyPace.toFixed(2)} today). ${KPI.dist.action}`} right={<button onClick={() => go('distribution')} className="text-[12px] text-teal hover:underline inline-flex items-center gap-1">Details <Icon name="ArrowRight" size={13} /></button>}>
+      <Panel title={`Observations per teacher by ${lvl.toLowerCase()}`} formula={`Average observations per allotted teacher this financial year (1 Apr to ${fmtDay(p.asOf)}), against the pace towards ${settings.annualTarget} a year (${fyPace.toFixed(2)} today). ${KPI.dist.action}`}>
         <VCol rows={obsRows} unit="num" decimals={1} target={fyPace} targetLabel={`Pace ${fyPace.toFixed(2)}`} onSelect={drill} />{legend(true)}
       </Panel>
     </div>
@@ -906,62 +898,6 @@ function CoveragePage(p) {
           <td className="px-3 text-right num">{nf(x.allot - x.obs)}</td>
           <td className="px-3 text-right num"><span style={{ color: x.fy != null && x.fy < fyPace * 0.85 ? '#9E2A22' : C.ink }}>{x.fy == null ? '—' : x.fy.toFixed(2)}</span></td>
           <td className="px-3 pr-5 whitespace-nowrap">{lastLabel(x.last, asOf)}</td></tr>} />
-    </Panel>
-  </div>;
-}
-
-/* ---------------- Observation distribution ---------------- */
-function DistributionPage(p) {
-  const { S, rows, level, drill, settings, fyPace, periodLabel, qTrend, fy, f, asOf } = p;
-  const [tab, setTab] = useState(0); const [q, setQ] = useState('');
-  const lvl = lvlLabel(level).toLowerCase();
-  const dist = S.m.dist.map((n, i) => ({ name: DIST_LBL[i], n, share: S.m.distAllotted ? (100 * n) / S.m.distAllotted : 0 }));
-  const qDist = qTrend.map(({ q: qq, A }) => { const m = derive(scopeRaw(A, f)); const o = { label: qq.short }; m.dist.forEach((n, i) => { o['d' + i] = m.distAllotted ? (100 * n) / m.distAllotted : 0; o['n' + i] = n; }); return o; });
-  const lowCut = Math.max(1, Math.floor(fyPace)), highCut = Math.max(settings.annualTarget, Math.ceil(fyPace * settings.highFactor));
-  const list = useMemo(() => DB.teachers.filter(t => { const c = DB.coaches[t.coach]; return inScopeCoach(c, f) && c.join <= asOf && c.exit > asOf; }).map(t => ({ t, n: fy.snap.tCnt[t.id] })), [fy, f.district, f.block, f.coach, asOf]);
-  const low = list.filter(x => x.n < lowCut).sort((a, b) => a.n - b.n), high = list.filter(x => x.n >= highCut).sort((a, b) => b.n - a.n);
-  const shown = (tab === 0 ? low : high).filter(x => `${x.t.code} ${DB.schools[x.t.school].code} ${DB.coaches[x.t.coach].code} ${placeOf(x.t.block)}`.toLowerCase().includes(q.trim().toLowerCase()));
-  const zero = dist[0].share, high4 = S.m.distAllotted ? (100 * (S.m.dist[4] + S.m.dist[5])) / S.m.distAllotted : 0;
-  const reading = zero > 25 && high4 > 15 ? 'High spread with low coverage: visits look concentrated on a few teachers. Review school selection with the block coaches.'
-    : zero > 25 ? 'Coverage is low: many teachers are not being reached. Check caseload first, then agree a visit plan with the block coaches.'
-    : (S.m.meanObs || 0) < 1.5 ? 'Most teachers have been observed about once, with little follow-up coaching.' : 'High coverage with a healthy spread: this is follow-up coaching.';
-  return <div className="flex flex-col gap-4">
-    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-      <Tile label="Observations per teacher, FY to date" value={S.fyMean == null ? '—' : S.fyMean.toFixed(2)} sub={`Pace today ${fyPace.toFixed(2)} · target ${settings.annualTarget} a year`} />
-      <Tile label="Teachers with no observation" value={f0(zero)} sub={`${nf(S.m.dist[0])} of ${nf(S.m.distAllotted)} this period`} />
-      <Tile label="Low-support teachers" value={nf(low.length)} sub={`fewer than ${lowCut} observation${lowCut === 1 ? '' : 's'} this year`} />
-      <Tile label="High-support teachers" value={nf(high.length)} sub={`${highCut} or more observations this year`} />
-    </div>
-    <div className="grid gap-4 grid-cols-1 xl:grid-cols-5">
-      <Panel className="xl:col-span-2" title="Distribution in this period" formula={KPI.dist.formula}>
-        <div style={{ height: 230 }}><ResponsiveContainer width="100%" height="100%">
-          <BarChart data={dist} margin={{ top: 22, right: 8, left: -12, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke={C.grid} /><XAxis dataKey="name" tick={{ fontSize: 11, fill: C.ink }} axisLine={{ stroke: C.line }} tickLine={false} />
-            <YAxis tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v, n, it) => [`${nf(v)} teachers (${it.payload.share.toFixed(1)}%)`, 'Allotted teachers']} contentStyle={{ fontSize: 12 }} labelFormatter={l => `${l} observation${l === '1' ? '' : 's'}`} />
-            <Bar dataKey="n" radius={[3, 3, 0, 0]} isAnimationActive={false}>{dist.map((d, i) => <Cell key={i} fill={DIST_COL[i]} />)}<LabelList dataKey="share" position="top" formatter={v => `${v.toFixed(0)}%`} style={{ fontSize: 10.5, fill: C.muted }} /></Bar>
-          </BarChart></ResponsiveContainer></div>
-        <div className="mt-2"><Note tone={zero > 25 ? 'warn' : 'info'}>{reading}</Note></div>
-      </Panel>
-      <Panel className="xl:col-span-3" title="Distribution across time" formula="Share of allotted teachers by observations received, quarter by quarter (Q3 is quarter-to-date).">
-        <div className="mb-2"><DistLegend /></div>
-        <div style={{ height: 250 }}><ResponsiveContainer width="100%" height="100%">
-          <BarChart data={qDist} margin={{ top: 6, right: 8, left: -10, bottom: 0 }} barCategoryGap="28%">
-            <CartesianGrid vertical={false} stroke={C.grid} /><XAxis dataKey="label" tick={{ fontSize: 11.5, fill: C.ink }} axisLine={{ stroke: C.line }} tickLine={false} />
-            <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v, n, it) => [`${it.payload['n' + n.slice(1)]} teachers (${Number(v).toFixed(0)}%)`, `${DIST_LBL[+n.slice(1)]} obs`]} contentStyle={{ fontSize: 12 }} />
-            {DIST_LBL.map((l, i) => <Bar key={l} dataKey={'d' + i} stackId="a" fill={DIST_COL[i]} isAnimationActive={false} />)}
-          </BarChart></ResponsiveContainer></div>
-      </Panel>
-    </div>
-    <Panel title={`Distribution by ${lvl}`} formula={`Share of each ${lvl}'s allotted teachers by observations received in ${periodLabel}. Listed alphabetically; click a bar to drill down.`} right={<DistLegend />}>
-      <DistStack rows={[...rows].sort((a, b) => a.name.localeCompare(b.name)).map(r => ({ id: r.id, name: r.name, dist: r.m.dist }))} onSelect={drill} labelWidth={LW(level)} />
-    </Panel>
-    <Panel title="High- and low-support teachers" formula={`From the sheet: district leadership receives the list of teachers with high support (more coaching cycles) and low support (fewer than the target), to plan equitable support in the district review meeting. Observations this financial year to ${fmtDay(asOf)}: low support = fewer than ${lowCut} (the pace towards ${settings.annualTarget} a year); high support = ${highCut} or more (${settings.highFactor}× the pace). Both cut-offs are prototype choices under Targets.`}
-      right={<><Search id="sup-q" value={q} onChange={setQ} placeholder="Search teacher, school, coach" /><Seg options={[`Low support (${low.length})`, `High support (${high.length})`]} value={tab} onChange={setTab} /></>}>
-      <DataTable head={[{ l: 'Teacher ID' }, { l: 'School' }, { l: 'District · Block' }, { l: 'Assigned coach' }, { l: 'Observations this year', r: 1 }]} rows={shown} empty="No teachers in this list."
-        render={x => <tr key={x.t.id} className="border-b border-[#F0F2F5]"><td className="pl-5 pr-3 py-2 font-medium">{x.t.code}</td><td className="px-3">{DB.schools[x.t.school].code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.t.block)}</td><td className="px-3 text-navy">{DB.coaches[x.t.coach].code}</td>
-          <td className="px-3 pr-5 text-right num font-semibold" style={{ color: tab === 0 ? '#9E2A22' : C.ink }}>{x.n}</td></tr>} />
     </Panel>
   </div>;
 }
@@ -1050,161 +986,6 @@ function EngagementPage(p) {
   </div>;
 }
 
-/* ---------------- Coach activity ---------------- */
-function ActivityPage(p) {
-  const { S, st, rows, rowSt, level, drill, settings, fortnights, scopeIds, idleOf, idleNow, asOf, cur, setBlock, setCoach } = p;
-  const [all, setAll] = useState(0);
-  const lvl = lvlLabel(level).toLowerCase();
-  const idleRows = [...rows].sort((a, b) => b.idle - a.idle || a.name.localeCompare(b.name)).map(r => ({ id: r.id, name: r.name, value: r.elig ? r.idle : null, status: rowSt(r).idle, tip: [['Idle coaches', nf(r.idle)], ['Deployed (14+ days)', nf(r.elig)]] }));
-  const trend = fortnights.map(fn => { const x = idleOf(scopeIds, fn.idle); return { label: fn.label, idle: x.idle, pct: x.pct }; });
-  const named = scopeIds.filter(c => idleNow[c]).map(c => ({ c, co: DB.coaches[c], idle: idleNow[c] === 2, last: cur.lastSub[c] })).sort((a, b) => b.idle - a.idle || a.last - b.last);
-  const shown = all ? named : named.filter(x => x.idle);
-  return <div className="flex flex-col gap-4">
-    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-      <Tile label="Idle coaches (no observation in 14 days)" value={nf(S.idle)} status={st.idle} />
-      <Tile label="% of deployed coaches" value={f1(S.idlePct)} sub={`${nf(S.elig)} deployed for 14+ days`} />
-      <Tile label={`${level === 'district' ? 'Districts' : 'Blocks'} above threshold (${settings.inactiveThreshold})`} value={level !== 'coach' ? nf(rows.filter(r => r.idle > settings.inactiveThreshold).length) : '—'} />
-      <Tile label="Window" value={`${fmtShort(asOf - 13)} – ${fmtShort(asOf)}`} sub="reviewed fortnightly" />
-    </div>
-    <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
-      <Panel title={`Idle coaches by ${lvl}`} formula={`${KPI.idle.formula} ${KPI.idle.action}`}>
-        <HBar rows={idleRows} unit="count" max={Math.max(settings.inactiveThreshold + 2, ...idleRows.map(r => r.value || 0)) + 1} target={level !== 'coach' ? settings.inactiveThreshold : null} targetLabel={`Threshold ${settings.inactiveThreshold}`} onSelect={drill} labelWidth={LW(level)} />
-      </Panel>
-      <Panel title="Fortnightly trend" formula="Idle coaches at the end of each fortnight (14-day windows ending on the dates shown), for the current scope.">
-        <div style={{ height: 260 }}><ResponsiveContainer width="100%" height="100%">
-          <BarChart data={trend} margin={{ top: 18, right: 8, left: -14, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke={C.grid} /><XAxis dataKey="label" tick={{ fontSize: 10.5, fill: C.muted }} axisLine={{ stroke: C.line }} tickLine={false} /><YAxis allowDecimals={false} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
-            <Tooltip cursor={{ fill: '#F1F3F5' }} formatter={(v, n, it) => [`${v} coaches (${f1(it.payload.pct)} of deployed)`, 'Idle']} contentStyle={{ fontSize: 12 }} />
-            <Bar dataKey="idle" radius={[3, 3, 0, 0]} fill="#C8372D" isAnimationActive={false}><LabelList dataKey="idle" position="top" style={{ fontSize: 10.5, fill: C.muted }} /></Bar>
-          </BarChart></ResponsiveContainer></div>
-      </Panel>
-    </div>
-    {p.district === '' ? <Panel title="Named coach list" formula="Per the sheet, the named coach list sits with the district view."><div className="text-[13px] text-muted py-8 text-center">Select a district, or click a district in the chart above, to see the named list of coaches and their last submission.</div></Panel> :
-    <Panel title="Named coach list" formula={`Coaches deployed for at least 14 days, with their last submitted observation. Per the sheet, the named list sits with the district view, so it appears once a district is selected. ${KPI.idle.action}`}
-      right={<Seg options={[`Idle (${named.filter(x => x.idle).length})`, `All coaches (${named.length})`]} value={all} onChange={setAll} />}>
-      <DataTable head={[{ l: 'Coach' }, { l: 'District · Block' }, { l: 'Status' }, { l: 'Last submission' }, { l: 'Days since', r: 1 }, { l: 'Deployed since' }]} rows={shown} empty="Every deployed coach submitted at least one observation in the last 14 days." minW={680}
-        render={x => <tr key={x.c} onClick={() => { setBlock(x.co.block); setCoach(x.c); }} className="border-b border-[#F0F2F5] hover:bg-[#F6FAFA] cursor-pointer"><td className="pl-5 pr-3 py-2 font-medium text-navy">{x.co.code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.co.block)}</td>
-          <td className="px-3"><Pill status={x.idle ? 'red' : 'green'} small label={x.idle ? 'No observation in 14 days' : 'Active'} /></td><td className="px-3">{x.last >= 0 ? fmtDay(x.last) : 'None in 90 days'}</td>
-          <td className="px-3 text-right num font-semibold" style={{ color: x.idle ? '#9E2A22' : C.ink }}>{x.last >= 0 ? asOf - x.last : '90+'}</td><td className="px-3 pr-5">{fmtDay(x.co.join)}</td></tr>} />
-    </Panel>}
-  </div>;
-}
-
-/* ---------------- Rating change ---------------- */
-function ChangePage(p) {
-  const { S, P, rows, rowSt, level, drill, f, cur, qTrend, prevLabel, setBlock, setCoach } = p;
-  const [sel, setSel] = useState('all'); const [dir, setDir] = useState(0); const [q, setQ] = useState('');
-  const qs = sel === 'all' ? COMP_Q : [sel]; const lvl = lvlLabel(level);
-  const raw = S.m.raw; const c = chgAll(raw, qs); const pc = P ? chgAll(P.m.raw, qs) : null;
-  const byQ = COMP_Q.map(k => { const x = chgAll(raw, [k]); return { name: `${Q_LABEL[k]}  ${x ? sgn(x.mean) : '—'}`, k, down: x ? x.down : 0, same: x ? x.same : 0, up: x ? x.up : 0, n: x ? x.n : 0, mean: x ? x.mean : null }; });
-  const grp = [...rows].map(r => { const x = chgAll(r.m.raw, qs); return { id: r.id, name: r.name, v: x ? x.mean : null, up: x ? x.up : null, n: x ? x.n : 0 }; }).sort((a, b) => (a.v ?? 99) - (b.v ?? 99));
-  const lim = Math.max(0.3, ...grp.map(g => Math.abs(g.v || 0))) * 1.25;
-  const trend = qTrend.map(({ q: qq, A }) => { const x = chgAll(scopeRaw(A, f), qs); return { label: qq.short, mean: x ? x.mean : null, up: x ? x.up : null, down: x ? x.down : null }; });
-  const teachers = useMemo(() => {
-    const L = cur.snap.lastQ, Pq = cur.snap.prevQ; const out = [];
-    DB.teachers.forEach(t => { if (!inScopeCoach(DB.coaches[t.coach], f)) return; let n = 0, sum = 0, up = 0, dn = 0, a = 0, b = 0;
-      qs.forEach(k => { const v = L[t.id * NQ + k], pv = Pq[t.id * NQ + k]; if (v && pv) { n++; sum += v - pv; if (v > pv) up++; else if (v < pv) dn++; a = pv; b = v; } });
-      if (n) out.push({ t, n, mean: sum / n, up, dn, a, b }); });
-    return out; }, [cur, sel, f.district, f.block, f.coach]);
-  const keep = x => dir === 0 ? x.mean < 0 : dir === 1 ? x.mean === 0 : dir === 2 ? x.mean > 0 : true;
-  const shown = teachers.filter(x => keep(x) && `${x.t.code} ${DB.coaches[x.t.coach].code} ${placeOf(x.t.block)}`.toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => a.mean - b.mean);
-  const cnt = [teachers.filter(x => x.mean < 0).length, teachers.filter(x => x.mean === 0).length, teachers.filter(x => x.mean > 0).length, teachers.length];
-  const one = sel !== 'all';
-  return <div className="flex flex-col gap-4">
-    <div className="flex flex-wrap items-center gap-2 text-[12.5px]"><span className="text-muted">Competency:</span>
-      {['all', ...COMP_Q].map(k => <button key={k} onClick={() => setSel(k)} className={`px-2.5 py-1 rounded border ${sel === k ? 'bg-navy text-white border-navy' : 'bg-white border-line text-ink hover:bg-canvas'}`}>{k === 'all' ? 'All Q1–Q8' : Q_LABEL[k]}</button>)}</div>
-    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-      <Tile label="Mean change (rating levels)" value={c ? sgn(c.mean) : '—'} status="grey" sub={pc ? `${sgn(pc.mean)} in ${prevLabel}` : 'No target: observation metric'} />
-      <Tile label="Ratings that improved" value={c ? f0(c.up) : '—'} sub={pc ? <Delta cur={c && c.up} prev={pc.up} label={`vs ${prevLabel}`} /> : ''} />
-      <Tile label="Ratings that declined" value={c ? f0(c.down) : '—'} sub={c ? `${f0(c.same)} unchanged` : ''} />
-      <Tile label="Matched ratings" value={c ? nf(c.n) : '0'} sub={`${nf(teachers.length)} teachers with two valid ratings this period`} />
-    </div>
-    <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
-      <Panel title="Change by question" formula={`${KPI.chg.formula} Bars show the share of matched ratings that went down, stayed the same or went up; the number after each question is the mean change.`}
-        right={<div className="flex gap-3 text-[11.5px] text-muted">{[['Declined', '#C8372D'], ['Same', '#C3CAD2'], ['Improved', '#0E7C86']].map(([l, col]) => <span key={l} className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: col }} />{l}</span>)}</div>}>
-        <div style={{ height: 290 }}><ResponsiveContainer width="100%" height="100%">
-          <BarChart data={byQ} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }} barCategoryGap={7}>
-            <CartesianGrid horizontal={false} stroke={C.grid} />
-            <XAxis type="number" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="name" width={84} tick={{ fontSize: 11, fill: C.ink }} interval={0} axisLine={false} tickLine={false} />
-            <Tooltip cursor={{ fill: 'rgba(18,48,90,0.05)' }} formatter={(v, n) => [`${Number(v).toFixed(0)}%`, n]} labelFormatter={(l, pl) => pl && pl[0] ? `${Q_LABEL[pl[0].payload.k]} · ${nf(pl[0].payload.n)} matched` : l} contentStyle={{ fontSize: 12 }} />
-            <Bar dataKey="down" name="Declined" stackId="a" fill="#C8372D" isAnimationActive={false} onClick={d => setSel(d.k)} cursor="pointer" />
-            <Bar dataKey="same" name="Same" stackId="a" fill="#C3CAD2" isAnimationActive={false} onClick={d => setSel(d.k)} cursor="pointer" />
-            <Bar dataKey="up" name="Improved" stackId="a" fill="#0E7C86" isAnimationActive={false} onClick={d => setSel(d.k)} cursor="pointer" />
-          </BarChart></ResponsiveContainer></div>
-      </Panel>
-      <Panel title="Over time" formula={`Quarter by quarter for ${one ? Q_LABEL[sel] : 'Q1–Q8'}: mean change in rating and the % of matched ratings that improved or declined.`}>
-        <Trend data={trend.map(t => ({ ...t, mean100: t.mean == null ? null : t.mean }))} lines={[{ key: 'up', name: '% improved', color: C.teal }, { key: 'down', name: '% declined', color: '#C8372D' }]} height={290} />
-        <div className="text-[11.5px] text-muted">Mean change: {trend.map(t => `${t.label} ${sgn(t.mean)}`).join(' · ')}</div>
-      </Panel>
-    </div>
-    <Panel title={`Mean change by ${lvl.toLowerCase()} · ${one ? Q_LABEL[sel] : 'Q1–Q8'}`} formula={`Mean change in rating level between each teacher’s two most recent valid observations, pooled over matched ratings. Bars left of zero mean ratings went down. Click a bar to drill down.`}>
-      <div style={{ height: Math.max(160, grp.length * 24 + 40) }}><ResponsiveContainer width="100%" height="100%">
-        <BarChart data={grp.map(g => ({ ...g, val: g.v ?? 0 }))} layout="vertical" margin={{ top: 4, right: 48, left: 4, bottom: 0 }} barCategoryGap={6}>
-          <CartesianGrid horizontal={false} stroke={C.grid} />
-          <XAxis type="number" domain={[-lim, lim]} tickFormatter={v => v.toFixed(1)} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
-          <YAxis type="category" dataKey="name" width={LW(level)} tick={{ fontSize: 11, fill: C.ink }} interval={0} axisLine={false} tickLine={false} />
-          <ReferenceLine x={0} stroke="#5B6B7B" />
-          <Tooltip cursor={{ fill: 'rgba(18,48,90,0.05)' }} formatter={(v, n, it) => [`${sgn(it.payload.v)} levels · ${f0(it.payload.up)} improved · ${nf(it.payload.n)} matched`, 'Mean change']} contentStyle={{ fontSize: 12 }} />
-          <Bar dataKey="val" isAnimationActive={false} cursor="pointer" onClick={d => drill(d.id)}>
-            {grp.map(g => <Cell key={g.id} fill={g.v == null ? '#C3CAD2' : g.v < 0 ? '#C8372D' : '#0E7C86'} />)}
-            <LabelList dataKey="v" position="right" formatter={v => sgn(v)} style={{ fontSize: 10.5, fill: C.muted }} /></Bar>
-        </BarChart></ResponsiveContainer></div>
-    </Panel>
-    <Panel title="Teacher-level change" formula={`Teachers with two valid ratings this period on ${one ? Q_LABEL[sel] : 'at least one of Q1–Q8'}, with the assigned coach, to guide individual support. ${one ? 'Previous → latest rating shown.' : 'Mean change across the matched questions.'}`}
-      right={<><Search id="ch-q" value={q} onChange={setQ} placeholder="Search teacher, coach, block" /><Seg options={[`Declined (${cnt[0]})`, `Same (${cnt[1]})`, `Improved (${cnt[2]})`, `All (${cnt[3]})`]} value={dir} onChange={setDir} /></>}>
-      <DataTable head={[{ l: 'Teacher ID' }, { l: 'District · Block' }, { l: 'Assigned coach' }, { l: one ? 'Previous → latest' : 'Questions up · same · down' }, { l: 'Change', r: 1 }]} rows={shown} empty="No teachers in this group."
-        render={x => <tr key={x.t.id} className="border-b border-[#F0F2F5]"><td className="pl-5 pr-3 py-2 font-medium">{x.t.code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.t.block)}</td>
-          <td className="px-3"><button className="text-navy font-medium hover:underline" onClick={() => { setBlock(x.t.block); setCoach(x.t.coach); }}>{DB.coaches[x.t.coach].code}</button></td>
-          <td className="px-3">{one ? <span className="num">{LEVEL[x.a]} → <b>{LEVEL[x.b]}</b></span> : <span className="num">{x.up} · {x.n - x.up - x.dn} · {x.dn} <span className="text-muted">of {x.n}</span></span>}</td>
-          <td className="px-3 pr-5 text-right num font-semibold" style={{ color: x.mean < 0 ? '#9E2A22' : x.mean > 0 ? '#1F6B30' : C.ink }}>{sgn(x.mean)}</td></tr>} />
-    </Panel>
-  </div>;
-}
-
-/* ---------------- SEF co-observation ---------------- */
-function SefPage(p) {
-  const { S, P, st, rows, rowSt, level, drill, f, qTrend, prevLabel, scopeIds, coK, sefT, settings, setBlock, setCoach, coach } = p;
-  const [order, setOrder] = useState(0); const [q, setQ] = useState('');
-  const sf = S.sef; const lvl = lvlLabel(level).toLowerCase();
-  const tLabel = settings.sefTarget == null ? 'Ideal 70%' : `Target ${settings.sefTarget}%`;
-  const qRows = Array.from({ length: NQ }, (_, k) => { const x = sf.q[k]; const r = x.n ? (100 * x.agree) / x.n : null;
-    return { id: k, name: Q_LABEL[k], value: r, status: x.n >= 5 ? hb(r, sefT, settings.band) : 'nodata', tip: [['Matched ratings', nf(x.n)], ['Mean abs. difference', x.n ? (x.abs / x.n).toFixed(2) : '—'], ['Coach − SEF (bias)', x.n ? sgn(x.bias / x.n) : '—']] }; });
-  const gRows = [...rows].sort((a, b) => (a.sef.rate ?? 999) - (b.sef.rate ?? 999)).map(r => ({ id: r.id, name: r.name, value: r.sef.n ? r.sef.rate : null, status: rowSt(r).sef, tip: [['Co-observations', nf(r.sef.co)], ['Matched ratings', nf(r.sef.n)], ['Mean abs. difference', r.sef.mad == null ? '—' : r.sef.mad.toFixed(2)]] }));
-  const trend = qTrend.map(({ q: qq, co }) => { const x = sefSum(co, scopeIds); return { label: qq.short, value: x.rate, n: x.co }; });
-  const coaches = scopeIds.map(c => ({ c, ...sefSum(coK, [c]), cc: DB.coaches[c] })).filter(x => x.n > 0)
-    .map(x => ({ ...x, worst: x.q.map((v, k) => ({ k, r: v.n ? v.agree / v.n : null })).filter(v => v.r != null && v.r < 1).sort((a, b) => a.r - b.r).slice(0, 3) }));
-  const list = coaches.filter(x => `${x.cc.code} ${placeOf(x.cc.block)}`.toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => order === 0 ? a.rate - b.rate : b.rate - a.rate);
-  const hi = qRows.filter(r => r.value != null && r.status !== 'nodata').sort((a, b) => a.value - b.value);
-  return <div className="flex flex-col gap-4">
-    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-      <Tile label="Agreement (coach = SEF rating)" value={sf.n ? f1(sf.rate) : '—'} status={st.sef} sub={P ? <Delta cur={sf.n ? sf.rate : null} prev={P.sef.n ? P.sef.rate : null} label={`vs ${prevLabel}`} /> : tLabel} />
-      <Tile label="SEF co-observations" value={nf(sf.co)} sub={`${nf(sf.n)} matched question ratings`} />
-      <Tile label="Mean absolute difference" value={sf.mad == null ? '—' : sf.mad.toFixed(2)} sub={sf.b == null ? '' : `levels · coaches rate ${sf.b > 0 ? 'higher' : 'lower'} than SEF by ${Math.abs(sf.b).toFixed(2)} on average`} />
-      <Tile label="Highest-variance questions" value={hi.length ? hi.slice(0, 2).map(r => r.name).join(', ') : '—'} sub={hi.length ? `lowest agreement: ${hi.slice(0, 2).map(r => f0(r.value)).join(', ')}` : 'Not enough matched ratings'} />
-    </div>
-    <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
-      <Panel title="Agreement by question" formula={`${KPI.sef.formula} Questions with fewer than 5 matched ratings are greyed. ${coach !== '' ? 'Showing the selected coach only.' : 'Click a coach in the table below to see their question-wise results.'}`}
-        right={<Pill status={st.sef} label={tLabel} />}>
-        <HBar rows={qRows} target={sefT} targetLabel={tLabel} labelWidth={40} />
-        <div className="text-[11px] text-muted mt-1">Hover a bar for the mean difference and direction of bias (positive = coach rates higher than SEF).</div>
-      </Panel>
-      <Panel title={`Agreement by ${lvl}`} formula={`% agreement for each ${lvl} on matched co-observations this period. Groups with fewer than 10 matched ratings are greyed. Click a bar to drill down.`}
-        views={[{ label: 'This period', node: <HBar rows={gRows} target={sefT} targetLabel={tLabel} onSelect={drill} labelWidth={LW(level)} /> },
-          { label: 'Over time', node: <Trend data={trend} lines={[{ key: 'value', name: '% agreement', color: '#7A5BA6' }]} target={sefT} height={300} /> }]} />
-    </div>
-    <Panel title="Coach variance table" formula={`Each coach’s agreement with SEF on matched co-observations, mean absolute difference, direction of bias and their three lowest-agreement questions. Sort by lowest or highest agreement to plan training (the sheet asks for both). Coaches with fewer than 10 matched ratings are marked as a small sample.`}
-      right={<><Search id="sef-q" value={q} onChange={setQ} placeholder="Search coach or block" /><Seg options={['Lowest agreement', 'Highest agreement']} value={order} onChange={setOrder} /></>}>
-      <DataTable head={[{ l: 'Coach' }, { l: 'District · Block' }, { l: 'Co-obs', r: 1 }, { l: 'Matched', r: 1 }, { l: 'Agreement', r: 1 }, { l: 'Mean abs. diff', r: 1 }, { l: 'Coach − SEF', r: 1 }, { l: 'Lowest-agreement questions' }]} rows={list} empty="No co-observations for coaches in this scope and period." minW={900}
-        render={x => <tr key={x.c} onClick={() => { setBlock(x.cc.block); setCoach(x.c); }} className={`border-b border-[#F0F2F5] hover:bg-[#F6FAFA] cursor-pointer ${coach === x.c ? 'bg-[#EAF4F5]' : ''}`}>
-          <td className="pl-5 pr-3 py-2 font-medium text-navy whitespace-nowrap">{x.cc.code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.cc.block)}</td>
-          <td className="px-3 text-right num">{x.co}</td><td className="px-3 text-right num">{x.n}{x.n < 10 && <span className="text-[10.5px] text-muted"> · small</span>}</td>
-          <td className="px-3 text-right"><span className="inline-block min-w-[52px] rounded px-1.5 py-0.5 num font-medium" style={quietStyle(x.n >= 10 ? hb(x.rate, sefT, settings.band) : 'nodata')}>{f0(x.rate)}</span></td>
-          <td className="px-3 text-right num">{x.mad.toFixed(2)}</td><td className="px-3 text-right num" style={{ color: Math.abs(x.b) >= 0.3 ? '#8A5600' : C.ink }}>{sgn(x.b)}</td>
-          <td className="px-3 pr-5 text-[12px] text-muted whitespace-nowrap">{x.worst.map(w => `${Q_LABEL[w.k]} ${Math.round(100 * w.r)}%`).join(' · ')}</td></tr>} />
-    </Panel>
-  </div>;
-}
 /* ---------------- Settings ---------------- */
 function SettingsModal({ settings, onClose, onSave }) {
   const [s, setS] = useState(settings);
