@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPARC Coach View</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: { navy:'#12305A', navy2:'#1C4478', teal:'#0E7C86', ink:'#1B2733', muted:'#5B6B7B', line:'#E2E7ED', canvas:'#F3F5F8' },
+      fontFamily: {
+        sans: ['"IBM Plex Sans"','"Segoe UI"','system-ui','-apple-system','Arial','sans-serif'],
+        cond: ['"IBM Plex Sans Condensed"','"IBM Plex Sans"','"Segoe UI"','Arial Narrow','sans-serif']
+      }
+    } }
+  };
+</script>
+<style>
+  /* Layout: navy header band + white filter bar; Power BI-style report pages as tabs; cards on a cool grey canvas. Single light theme by design. */
+  :root {
+    --navy:#12305A; --teal:#0E7C86; --ink:#1B2733; --muted:#5B6B7B; --line:#E2E7ED; --canvas:#F3F5F8; --surface:#FFFFFF;
+    --ok:#2E8540; --warn:#C77C02; --bad:#C8372D; --na:#9AA4B0;
+    color-scheme: light;
+  }
+  html, body { background: var(--canvas); color: var(--ink); }
+  body { font-family: "IBM Plex Sans","Segoe UI",system-ui,sans-serif; font-variant-numeric: tabular-nums; }
+  body::before { content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:60; background:var(--navy); }
+  .gutter { padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); }
+  .num { font-variant-numeric: tabular-nums; }
+  h1,h2,h3 { text-wrap: balance; }
+  .recharts-wrapper text { font-family: "IBM Plex Sans","Segoe UI",sans-serif; }
+  .recharts-surface:focus, .recharts-wrapper:focus, .recharts-sector:focus, path:focus { outline: none; }
+  button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .tbl th { position: sticky; top: 0; z-index: 1; }
+  .scroll-x { overflow-x: auto; }
+  .boot { display:flex; align-items:center; justify-content:center; min-height:60vh; color:var(--muted); font-size:14px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+</head><body>
+<div id="root"><div class="boot">Loading SPARC My Coaching Dashboard…</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
+<script>window.react = window.React; /* lucide-react UMD reads the lowercase global */</script>
+<script src="https://cdn.jsdelivr.net/npm/lucide-react@0.454.0/dist/umd/lucide-react.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useEffect, useCallback } = React;
+const { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, LineChart, Line, Cell, LabelList, Legend } = Recharts;
+const LI = window.LucideReact || {};
+const Icon = ({ name, size = 16, className = '', ...p }) => { const C = LI[name]; return C ? <C size={size} className={className} strokeWidth={2} {...p} /> : null; };
+
+/* =========================================================================
+   1. CALENDAR  (day index 0 = 1 Apr 2026, start of FY 2026-27)
+   ========================================================================= */
+const BASE = Date.UTC(2026, 3, 1);
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const toDay = s => { const [y, m, d] = s.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - BASE) / 864e5); };
+const toISO = day => new Date(BASE + day * 864e5).toISOString().slice(0, 10);
+const fmtDay = day => { const d = new Date(BASE + day * 864e5); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+const fmtShort = day => { const d = new Date(BASE + day * 864e5); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}`; };
+const dow = day => (3 + day) % 7; // 1 Apr 2026 is a Wednesday; 0 = Sunday
+const ASOF = toDay('2026-11-10');   // demo data cut-off
+
+const QUARTERS = [
+  { key: 'Q1', label: 'Q1 FY26-27 · Apr–Jun 2026', short: 'Q1', from: 0, end: toDay('2026-06-30') },
+  { key: 'Q2', label: 'Q2 FY26-27 · Jul–Sep 2026', short: 'Q2', from: toDay('2026-07-01'), end: toDay('2026-09-30') },
+  { key: 'Q3', label: 'Q3 FY26-27 · Oct–Dec 2026 (to date)', short: 'Q3 QTD', from: toDay('2026-10-01'), end: toDay('2026-12-31') },
+].map(q => ({ ...q, to: Math.min(q.end, ASOF) }));
+const MONTHS = [];
+for (let m = 4; m <= 11; m++) {
+  const mm = String(m).padStart(2, '0');
+  const from = toDay(`2026-${mm}-01`);
+  const end = toDay(m === 12 ? '2027-01-01' : `2026-${String(m + 1).padStart(2, '0')}-01`) - 1;
+  const to = Math.min(end, ASOF);
+  MONTHS.push({ key: `M${m}`, label: `${MON[m - 1]} 2026${to < end ? ' (to date)' : ''}`, short: MON[m - 1], from, end, to });
+}
+const qOf = day => QUARTERS.find(q => day >= q.from && day <= q.end) || QUARTERS[0];
+
+/* =========================================================================
+   2. DEMO DATA GENERATOR — synthetic records, deterministic seed.
+      Nothing here is Punjab programme data. District names and the state
+      target of 150 (Amritsar 30) follow the KPI sheet; everything else is
+      generated for the prototype.
+   ========================================================================= */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const NQ = 11;
+const Q_LABEL = Array.from({ length: NQ }, (_, i) => `Q${i + 1}`);
+const COMP_Q = [0, 1, 2, 3, 4, 5, 6, 7];
+const ENG_Q = [8, 9, 10];
+
+const DISTRICT_SEED = [
+  ['Amritsar', 30], ['Barnala', 3], ['Bathinda', 6], ['Faridkot', 3], ['Fatehgarh Sahib', 3], ['Fazilka', 4],
+  ['Ferozepur', 5], ['Gurdaspur', 9], ['Hoshiarpur', 8], ['Jalandhar', 10], ['Kapurthala', 4], ['Ludhiana', 14],
+  ['Malerkotla', 3], ['Mansa', 4], ['Moga', 4], ['Pathankot', 3], ['Patiala', 10], ['Rupnagar', 3],
+  ['SAS Nagar', 5], ['Sangrur', 6], ['SBS Nagar', 3], ['Sri Muktsar Sahib', 4], ['Tarn Taran', 6],
+];
+// Demo storylines so every view has something to show
+const OVERRIDES = {
+  'Tarn Taran': { fill: 0.5 }, 'Amritsar': { fill: 0.8 }, 'Fazilka': { no: 0.22 }, 'Mansa': { fb: 0.58 },
+  'Ferozepur': { onTime: 0.42 }, 'Barnala': { inact: 0.75 }, 'Ludhiana': { conc: 0.72 }, 'Gurdaspur': { rate: 0.5 },
+  'Moga': { qual: -0.55 }, 'Patiala': { inact: 0.3 },
+};
+
+function generate() {
+  const R = mulberry32(20261110);
+  const R2 = mulberry32(777); // separate stream for SEF co-observations so the main demo data matches the District view
+  const rnd = (a, b) => a + R() * (b - a);
+  const rint = (a, b) => Math.floor(rnd(a, b + 1));
+  const gauss = () => { let u = 0, v = 0; while (!u) u = R(); while (!v) v = R(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const sig = x => 1 / (1 + Math.exp(-x));
+  const QD = [0.5, 0.2, -0.1, 0.3, -0.55, 0.05, -0.3, 0.1, -0.2, -0.6, -0.4];
+
+  const districts = [], blocks = [], coaches = [], schools = [], teachers = [], obs = [], pending = [], unsynced = [];
+  DISTRICT_SEED.forEach(([name, target], di) => {
+    const p = { fill: rnd(0.84, 1), fb: rnd(0.8, 0.95), onTime: rnd(0.74, 0.95), no: rnd(0.03, 0.075), inact: rnd(0, 0.12),
+      conc: rnd(0.08, 0.28), qual: gauss() * 0.25, rate: rnd(0.92, 1.12), ...(OVERRIDES[name] || {}) };
+    const nb = Math.max(2, Math.min(8, Math.ceil(target / 4)));
+    const abbr = name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
+    const d = { id: di, name, target, abbr, blocks: [], coaches: [] };
+    districts.push(d);
+    for (let b = 0; b < nb; b++) {
+      const id = blocks.length;
+      blocks.push({ id, name: `${name} · Block ${b + 1}`, short: `Block ${b + 1}`, district: di, coaches: [], target: Math.floor(target / nb) + (b < target % nb ? 1 : 0) });
+      d.blocks.push(id);
+    }
+    const deployed = Math.max(1, Math.round(target * p.fill));
+    for (let k = 0; k < deployed; k++) {
+      const bid = d.blocks[k % nb];
+      const c = { id: coaches.length, district: di, block: bid, join: R() < 0.78 ? rint(0, 6) : rint(20, 185), exit: 9999 };
+      if (R() < 0.04) { const e = rint(c.join + 45, ASOF + 40); if (e <= ASOF) c.exit = e; }
+      c.code = `Coach ${abbr}-${String(k + 1).padStart(2, '0')}`; coaches.push(c); d.coaches.push(c.id); blocks[bid].coaches.push(c.id);
+      const cNo = p.no * (R() < 0.1 ? 3.6 : rnd(0.6, 1.3)); const cPrompt = R() < 0.22; const cUnsync = R() < 0.15 ? 0.22 : 0.004; const cLen = R2() < 0.15;
+      const inactiveFrom = R() < p.inact ? ASOF - rint(15, 35) : 9999;
+      let lvS = -1, lvE = -1; if (R() < 0.3) { lvS = rint(c.join, ASOF); lvE = lvS + rint(4, 22); }
+      const nS = rint(6, 9), sch = [], sids = [], seen = {};
+      for (let s = 0; s < nS; s++) {
+        const sid = schools.length; sids.push(sid); schools.push({ id: sid, coach: c.id, block: bid, district: di, code: `${abbr} School ${String(sid).padStart(4, '0')}`, nT: 0 });
+        const ts = []; const nT = rint(3, 5);
+        for (let t = 0; t < nT; t++) { const tid = teachers.length; teachers.push({ id: tid, school: sid, coach: c.id, block: bid, district: di, code: `${abbr}-T${String(tid).padStart(5, '0')}`, ab: gauss() * 0.85 + p.qual }); ts.push(tid); schools[sid].nT++; }
+        sch.push(ts);
+      }
+      for (let day = c.join; day <= ASOF && day < c.exit; day++) {
+        if (dow(day) === 0) continue;
+        if (day >= inactiveFrom) break;
+        if (day >= lvS && day < lvE) continue;
+        if (R() > 0.5 * p.rate) continue;
+        const si = R() < p.conc ? (R() < 0.5 ? 0 : 1) : rint(0, nS - 1);
+        const ts = sch[si]; const n = R() < 0.4 ? 2 : 1;
+        for (let k2 = 0; k2 < n; k2++) {
+          const t = R() < p.conc ? ts[0] : R() < 0.55 ? ts.reduce((a, b) => ((seen[b] || 0) < (seen[a] || 0) ? b : a)) : ts[rint(0, ts.length - 1)];
+          seen[t] = (seen[t] || 0) + 1;
+          const sub = day + (cPrompt ? (R() < 0.7 ? 0 : 1) : R() < p.onTime ? (R() < 0.55 ? 0 : rint(1, 2)) : rint(3, 10));
+          if (sub > ASOF) { pending.push({ c: c.id, s: sids[si], t, day }); continue; } // geotagged visit, form not yet submitted
+          if (day >= ASOF - 40 && day <= ASOF - 8 && R() < cUnsync) { unsynced.push({ c: c.id, s: sids[si], t, day }); continue; } // recorded on device, not synced
+          const resp = new Array(NQ); const ab = teachers[t].ab;
+          for (let q = 0; q < NQ; q++) {
+            if (R() < cNo * (q >= 8 ? 1.4 : 1)) { resp[q] = 0; continue; } // 0 = Not Observed
+            const pr = sig(-0.9 + ab + QD[q] + 0.0055 * day);
+            resp[q] = R() < pr ? (R() < 0.4 ? 4 : 3) : (R() < 0.35 ? 1 : 2); // 1–4 rubric, benchmark = 3+
+          }
+          const o = { day, sub, t, c: c.id, fb: R() < p.fb ? 1 : 0, resp };
+          if (R2() < 0.07) o.sef = resp.map((v, q) => { // SEF team co-observation of the same lesson
+            if (v === 0) return 0;
+            const pDis = 0.2 + (cLen ? 0.3 : 0) + (q === 4 || q === 9 ? 0.15 : 0);
+            if (R2() >= pDis) return v;
+            let s = cLen ? -1 : (R2() < 0.5 ? -1 : 1); if (v + s < 1 || v + s > 4) s = -s; return v + s; });
+          obs.push(o);
+        }
+      }
+    }
+  });
+  obs.sort((a, b) => a.day - b.day);
+  const N = obs.length;
+  const O = { n: N, day: new Int16Array(N), sub: new Int16Array(N), t: new Int32Array(N), c: new Int16Array(N), fb: new Uint8Array(N), valid: new Uint8Array(N), resp: new Uint8Array(N * NQ) };
+  obs.forEach((o, i) => {
+    O.day[i] = o.day; O.sub[i] = o.sub; O.t[i] = o.t; O.c[i] = o.c; O.fb[i] = o.fb;
+    let v = 0; for (let q = 0; q < NQ; q++) { O.resp[i * NQ + q] = o.resp[q]; if (o.resp[q]) v = 1; }
+    O.valid[i] = v;
+  });
+  const co = []; obs.forEach((o, i) => { if (o.sef) co.push({ i, c: o.c, t: o.t, day: o.day, sef: o.sef }); });
+  const firstIdx = new Int32Array(ASOF + 2); let j = 0;
+  for (let d = 0; d <= ASOF + 1; d++) { while (j < N && O.day[j] < d) j++; firstIdx[d] = j; }
+  return { districts, blocks, coaches, schools, teachers, O, firstIdx, pending, unsynced, co };
+}
+const DB = generate();
+
+/* =========================================================================
+   3. KPI ENGINE — coach level. Raw numerators/denominators per coach,
+      summed to block and district; every rate is Σnum ÷ Σden.
+   ========================================================================= */
+const NT = DB.teachers.length;
+const TC = Int32Array.from(DB.teachers.map(t => t.coach));
+const TS = Int32Array.from(DB.teachers.map(t => t.school));
+const prevQ = new Uint8Array(NT * NQ), lastQ = new Uint8Array(NT * NQ), lastQDay = new Int16Array(NT * NQ), lastObs = new Int32Array(NT), engLast = new Uint8Array(NT), engDay = new Int16Array(NT);
+
+function blankRaw() {
+  return { target: 0, lag: [0, 0, 0, 0, 0, 0], chgN: Array(NQ).fill(0), chgSum: Array(NQ).fill(0), chgUp: Array(NQ).fill(0), chgDown: Array(NQ).fill(0), deployed: 0, coaches: 0, schoolsAllotted: 0, schoolsVisited: 0, teachersAllotted: 0, teachersObserved: 0,
+    dist: [0, 0, 0, 0, 0, 0], distAllotted: 0, validSum: 0, compMet: Array(NQ).fill(0), compDen: Array(NQ).fill(0),
+    adoptMet: 0, adoptDen: 0, adoptQ: Array(NQ).fill(0), engMet: 0, engDen: 0, noResp: 0, totalResp: 0,
+    obs: 0, onTime: 0, within1: 0, fb: 0, eligible: 0, inactive: 0 };
+}
+function addRaw(a, b) { for (const k in a) { if (Array.isArray(a[k])) a[k].forEach((_, i) => { a[k][i] += b[k][i]; }); else a[k] += b[k]; } return a; }
+function sumRaw(list) { const r = blankRaw(); list.forEach(x => addRaw(r, x)); return r; }
+const isActive = (c, f, t) => c.join <= t && c.exit > f;
+
+function aggregate(win, priority) {
+  const { coaches, schools, teachers, O, firstIdx } = DB;
+  const K = coaches.map(() => blankRaw());
+  const asOf = Math.min(win.to, ASOF);
+  coaches.forEach(c => { const r = K[c.id]; if (c.join <= asOf && c.exit > asOf) r.deployed = 1; if (isActive(c, Math.min(win.from, win.covFrom), win.to)) r.coaches = 1; });
+  // last submission + 14-day inactivity (coaches deployed ≥ 14 days)
+  const wFrom = asOf - 13; const has = new Uint8Array(coaches.length); const lastSub = new Int16Array(coaches.length).fill(-1);
+  for (let i = firstIdx[Math.max(0, asOf - 90)]; i < firstIdx[asOf + 1]; i++) { const s = O.sub[i]; if (s <= asOf) { const c = O.c[i]; if (s > lastSub[c]) lastSub[c] = s; if (s >= wFrom) has[c] = 1; } }
+  coaches.forEach(c => { if (c.join <= asOf - 14 && c.exit > asOf) { K[c.id].eligible = 1; if (!has[c.id]) K[c.id].inactive = 1; } });
+  const sVis = new Uint8Array(schools.length), tCov = new Uint8Array(NT), tCnt = new Uint16Array(NT);
+  lastQ.fill(0); prevQ.fill(0); lastObs.fill(-1); engLast.fill(255);
+  const start = Math.max(0, Math.min(win.from, win.covFrom)), end = Math.min(win.to, ASOF);
+  if (end >= start) {
+    for (let i = firstIdx[start]; i < firstIdx[end + 1]; i++) {
+      const d = O.day[i], t = O.t[i];
+      if (d >= win.covFrom) { sVis[TS[t]] = 1; if (O.valid[i]) tCov[t] = 1; }
+      if (d >= win.from) {
+        const r = K[TC[t]]; r.obs++; r.fb += O.fb[i]; const lag = O.sub[i] - d; if (lag <= 2) r.onTime++; if (lag <= 1) r.within1++; r.lag[lag <= 3 ? lag : lag <= 7 ? 4 : 5]++;
+        const base = i * NQ;
+        for (let q = 0; q < NQ; q++) { const v = O.resp[base + q]; r.totalResp++; if (v === 0) r.noResp++; else { prevQ[t * NQ + q] = lastQ[t * NQ + q]; lastQ[t * NQ + q] = v; lastQDay[t * NQ + q] = d; } }
+        if (O.valid[i]) { tCnt[t]++; lastObs[t] = i; }
+        const a = O.resp[base + 8], b = O.resp[base + 9], c = O.resp[base + 10];
+        if (a && b && c) { engLast[t] = (a >= 3) + (b >= 3) + (c >= 3); engDay[t] = d; }
+      }
+    }
+  }
+  schools.forEach(s => { if (isActive(coaches[s.coach], win.covFrom, win.to)) { const r = K[s.coach]; r.schoolsAllotted++; if (sVis[s.id]) r.schoolsVisited++; } });
+  teachers.forEach(tc => {
+    const t = tc.id, r = K[tc.coach], c = coaches[tc.coach];
+    if (isActive(c, win.covFrom, win.to)) { r.teachersAllotted++; if (tCov[t]) r.teachersObserved++; }
+    if (isActive(c, win.from, win.to)) { r.distAllotted++; r.dist[Math.min(tCnt[t], 5)]++; r.validSum += tCnt[t]; }
+    for (let q = 0; q < NQ; q++) { const v = lastQ[t * NQ + q]; if (v) { r.compDen[q]++; if (v >= 3) r.compMet[q]++; const pv = prevQ[t * NQ + q]; if (pv) { r.chgN[q]++; r.chgSum[q] += v - pv; if (v > pv) r.chgUp[q]++; else if (v < pv) r.chgDown[q]++; } } }
+    const lo = lastObs[t];
+    if (lo >= 0) { r.adoptDen++; let met = false; priority.forEach(q => { if (O.resp[lo * NQ + q] >= 3) { r.adoptQ[q]++; met = true; } }); if (met) r.adoptMet++; }
+    if (engLast[t] !== 255) { r.engDen++; if (engLast[t] >= 2) r.engMet++; }
+  });
+  const B = DB.blocks.map(b => sumRaw(b.coaches.map(c => K[c])));
+  B.forEach((r, b) => { r.target = DB.blocks[b].target; });
+  const D = DB.districts.map(d => sumRaw(d.blocks.map(b => B[b])));
+  const S = sumRaw(D);
+  return { K, B, D, S, lastSub, snap: { lastQ: lastQ.slice(), lastQDay: lastQDay.slice(), lastObs: lastObs.slice(), eng: engLast.slice(), engDay: engDay.slice(), tCnt } };
+}
+function scopeRaw(A, f) { if (f.coach !== '') return A.K[f.coach]; if (f.block !== '') return A.B[f.block]; if (f.district !== '') return A.D[f.district]; return A.S; }
+function inScopeCoach(c, f) { return (f.district === '' || c.district === f.district) && (f.block === '' || c.block === f.block) && (f.coach === '' || c.id === f.coach); }
+
+const pct = (a, b) => (b > 0 ? (100 * a) / b : null);
+function derive(r) {
+  const comp = r.compDen.map((d, q) => pct(r.compMet[q], d));
+  let low = null; COMP_Q.forEach(q => { if (comp[q] != null && (low == null || comp[q] < low.v)) low = { q, v: comp[q] }; });
+  const vals = COMP_Q.map(q => comp[q]).filter(v => v != null);
+  return {
+    raw: r, deployed: r.deployed, coaches: r.coaches, target: r.target, fill: pct(r.deployed, r.target), shortfall: r.target - r.deployed, lag: r.lag,
+    chg: r.chgN.map((n, q) => (n ? { n, mean: r.chgSum[q] / n, up: (100 * r.chgUp[q]) / n, down: (100 * r.chgDown[q]) / n } : null)),
+    schoolsAllotted: r.schoolsAllotted, schoolsVisited: r.schoolsVisited, schoolCov: pct(r.schoolsVisited, r.schoolsAllotted),
+    teachersAllotted: r.teachersAllotted, teachersObserved: r.teachersObserved, teacherCov: pct(r.teachersObserved, r.teachersAllotted),
+    caseload: r.distAllotted, dist: r.dist, distAllotted: r.distAllotted, meanObs: r.distAllotted ? r.validSum / r.distAllotted : null,
+    comp, compLow: low, compMax: vals.length ? Math.max(...vals) : null,
+    adopt: pct(r.adoptMet, r.adoptDen), adoptDen: r.adoptDen, adoptMet: r.adoptMet, adoptQ: r.adoptQ.map(v => pct(v, r.adoptDen)),
+    eng: pct(r.engMet, r.engDen), engDen: r.engDen, engMet: r.engMet,
+    no: pct(r.noResp, r.totalResp), noResp: r.noResp, totalResp: r.totalResp,
+    ontime: pct(r.onTime, r.obs), onTimeN: r.onTime, within1: pct(r.within1, r.obs), within1N: r.within1, obs: r.obs,
+    fbRate: pct(r.fb, r.obs), fb: r.fb,
+    inactive: r.eligible ? r.inactive : null, eligible: r.eligible,
+  };
+}
+function weeklyOnTime(endDay) {
+  const { O, firstIdx } = DB;
+  let wk = endDay; while (dow(wk) !== 1 && wk > 0) wk--;
+  const out = [];
+  for (let w = 11; w >= 0; w--) {
+    const s = wk - 7 * w; if (s < 0) continue; const e = Math.min(s + 6, ASOF);
+    const per = DB.coaches.map(() => [0, 0]);
+    for (let i = firstIdx[s]; i < firstIdx[e + 1]; i++) { const p = per[O.c[i]]; p[1]++; if (O.sub[i] - O.day[i] <= 2) p[0]++; }
+    out.push({ label: fmtShort(s), per });
+  }
+  return out;
+}
+/* ---- district operational lists ---- */
+function overdueSchools(asOf, f) {
+  const q = qOf(asOf); const qi = QUARTERS.indexOf(q); const pq = qi > 0 ? QUARTERS[qi - 1] : null;
+  const last = new Int16Array(DB.schools.length).fill(-1);
+  for (let i = 0; i < DB.firstIdx[asOf + 1]; i++) last[TS[DB.O.t[i]]] = DB.O.day[i];
+  return DB.schools.filter(s => { const c = DB.coaches[s.coach]; return inScopeCoach(c, f) && isActive(c, q.from, asOf) && last[s.id] < q.from; })
+    .map(s => { const c = DB.coaches[s.coach]; const l = last[s.id]; return { s, c, last: l, days: l >= 0 ? asOf - l : null,
+      twoQ: !!pq && l < pq.from && c.join <= pq.from }; })
+    .sort((a, b) => (b.days == null ? 1e6 : b.days) - (a.days == null ? 1e6 : a.days) || a.s.code.localeCompare(b.s.code));
+}
+function pendingForms(asOf, f) {
+  const out = []; const { O, firstIdx } = DB;
+  for (let i = firstIdx[Math.max(0, asOf - 12)]; i < firstIdx[asOf + 1]; i++) if (O.sub[i] > asOf) out.push({ c: O.c[i], s: TS[O.t[i]], day: O.day[i] });
+  DB.pending.forEach(p => { if (p.day <= asOf) out.push({ c: p.c, s: p.s, day: p.day }); });
+  return out.filter(p => inScopeCoach(DB.coaches[p.c], f)).map(p => ({ ...p, days: asOf - p.day })).sort((a, b) => b.days - a.days);
+}
+function unsyncedForms(asOf, f) {
+  return DB.unsynced.filter(u => u.day <= asOf - 8 && u.day >= asOf - 40 && inScopeCoach(DB.coaches[u.c], f)).map(u => ({ ...u, days: asOf - u.day })).sort((a, b) => b.days - a.days);
+}
+
+/* =========================================================================
+   5. UI PRIMITIVES — calm by default: formulas behind an info icon, one
+      chart per panel (tabs), colour only where something needs attention.
+   ========================================================================= */
+const C = { navy: '#12305A', teal: '#0E7C86', ink: '#1B2733', muted: '#5B6B7B', grid: '#EDF0F4', line: '#E2E7ED' };
+const quietStyle = st => (st === 'red' || st === 'amber' ? { background: STATUS[st].bg, color: STATUS[st].fg } : { color: C.ink });
+const SHORT_STATUS = { grey: 'Target TBC', nodata: 'No data', progress: 'In progress' };
+function Pill({ status, label, small }) {
+  const s = STATUS[status] || STATUS.grey;
+  return <span className={`inline-flex items-center gap-1.5 rounded-full ${small ? 'px-1.5 py-0 text-[10.5px]' : 'px-2 py-0.5 text-[11px]'} font-medium whitespace-nowrap`} style={{ background: s.bg, color: s.fg }}>
+    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.dot }} />{label || s.label}</span>;
+}
+function StatusDot({ status, label }) {
+  const s = STATUS[status] || STATUS.grey;
+  return <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium whitespace-nowrap" style={{ color: s.fg }}><span className="w-2 h-2 rounded-full" style={{ background: s.dot }} />{label || SHORT_STATUS[status] || s.label}</span>;
+}
+function Delta({ cur, prev, lower, unit = 'pp', label }) {
+  if (cur == null || prev == null) return <span className="text-[11px] text-muted whitespace-nowrap">No earlier data</span>;
+  const d = cur - prev; const flat = Math.abs(d) < 0.05;
+  const good = flat ? null : lower ? d < 0 : d > 0;
+  const color = flat ? C.muted : good ? '#1F6B30' : '#9E2A22';
+  return <span className="text-[11px] inline-flex items-center gap-1 whitespace-nowrap" style={{ color }}>
+    <Icon name={flat ? 'Minus' : d > 0 ? 'ArrowUpRight' : 'ArrowDownRight'} size={12} />
+    {flat ? 'No change' : `${d > 0 ? '+' : ''}${unit === 'pp' ? d.toFixed(1) + ' pp' : Math.round(d)}`}
+    {label && <span className="text-muted">{label}</span>}
+  </span>;
+}
+function InfoTip({ text }) {
+  const [pos, setPos] = useState(null);
+  useEffect(() => { if (!pos) return; const close = () => setPos(null); window.addEventListener('scroll', close, true); window.addEventListener('resize', close); return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); }; }, [pos]);
+  if (!text) return null;
+  return <span className="inline-flex align-middle">
+    <button type="button" aria-label="How this is calculated" aria-expanded={!!pos}
+      onClick={e => { e.stopPropagation(); if (pos) { setPos(null); return; } const r = e.currentTarget.getBoundingClientRect(); const w = Math.min(320, window.innerWidth - 24); setPos({ top: r.bottom + 6, left: Math.max(12, Math.min(r.left - 8, window.innerWidth - w - 12)), w }); }}
+      onBlur={() => setPos(null)} className="w-5 h-5 grid place-items-center rounded-full text-[#8A97A6] hover:text-teal hover:bg-canvas"><Icon name="Info" size={14} /></button>
+    {pos && <span role="tooltip" style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.w }} className="z-50 rounded-md border border-line bg-white shadow-xl p-3 text-[12px] leading-snug text-ink font-normal normal-case tracking-normal text-left">{text}</span>}
+  </span>;
+}
+function Seg({ options, value, onChange }) {
+  return <div className="inline-flex rounded-md bg-[#EEF1F5] p-0.5 max-w-full overflow-x-auto" role="tablist">
+    {options.map((o, i) => <button key={i} type="button" role="tab" aria-selected={value === i} onClick={() => onChange(i)}
+      className={`px-2.5 py-1 text-[12px] rounded whitespace-nowrap ${value === i ? 'bg-white text-navy font-semibold shadow-sm' : 'text-muted hover:text-ink'}`}>{o}</button>)}
+  </div>;
+}
+function Panel({ title, formula, right, children, className = '', views }) {
+  const [vi, setVi] = useState(0);
+  return <section className={`bg-white border border-line rounded-lg min-w-0 ${className}`}>
+    <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 pt-4 pb-3">
+      <div className="flex items-center gap-1 min-w-0"><h3 className="text-[14px] font-semibold text-ink">{title}</h3><InfoTip text={formula} /></div>
+      {(right || views) && <div className="flex items-center gap-2 flex-wrap">{right}{views && <Seg options={views.map(v => v.label)} value={vi} onChange={setVi} />}</div>}
+    </header>
+    <div className="px-5 pb-5">{views ? views[Math.min(vi, views.length - 1)].node : children}</div>
+  </section>;
+}
+function Stats({ items }) {
+  return <div className="flex flex-wrap gap-x-7 gap-y-2 mb-3">{items.filter(Boolean).map(([l, v, color], i) => <div key={i}>
+    <div className="text-[11.5px] text-muted">{l}</div><div className="font-cond text-[22px] leading-tight font-semibold num" style={{ color: color || C.ink }}>{v}</div></div>)}</div>;
+}
+function Note({ tone = 'info', icon, children }) {
+  const t = { info: ['#EEF4FA', '#2F5A87'], warn: ['#FDF5E6', '#7A4C00'], bad: ['#FCEDEB', '#8E261F'], grey: ['#F2F4F6', '#4F5A66'] }[tone];
+  return <div className="flex gap-2 items-start rounded-md px-3 py-2 text-[12px] leading-snug" style={{ background: t[0], color: t[1] }}>
+    <Icon name={icon || (tone === 'warn' || tone === 'bad' ? 'AlertTriangle' : 'Info')} size={14} className="mt-0.5 shrink-0" /><div>{children}</div></div>;
+}
+function PendingLine({ items }) {
+  return <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-dashed border-[#C6CED8] bg-white px-4 py-2.5 text-[12.5px]">
+    <span className="inline-flex items-center gap-1.5 text-muted font-medium"><Icon name="Hourglass" size={14} />Pending, not shown until ready:</span>
+    {items.map(([t, x]) => <span key={t} className="inline-flex items-center gap-0.5 text-ink">{t}<InfoTip text={x} /></span>)}
+  </div>;
+}
+function DemoFooter({ sheet }) {
+  return <footer className="gutter py-4 text-[11.5px] text-muted border-t border-line bg-white">
+    <b className="text-[#8A5600]">Demo data.</b> Every value, ID, school and teacher is generated from synthetic records for design review; nothing here is programme data. Formulas, targets and actions follow the “{sheet}” sheet of the KPI workbook. Question labels Q1–Q11 stand in for the Punjab CLOB 2026-27 form.
+  </footer>;
+}
+function ChartTip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const r = payload[0].payload;
+  return <div className="bg-white border border-line rounded-md shadow-lg px-3 py-2 text-[12px] min-w-[180px]">
+    <div className="font-semibold text-ink mb-1">{r.name}</div>
+    {(r.tip || []).map(([k, v], i) => <div key={i} className="flex justify-between gap-4"><span className="text-muted">{k}</span><span className="font-medium num">{v}</span></div>)}
+    {r.status && <div className="mt-1.5"><Pill status={r.status} small /></div>}
+    {r.clickable && <div className="text-[10.5px] text-teal mt-1">Click to drill down</div>}
+  </div>;
+}
+function HBar({ rows, target, targetLabel, refs = [], max = 100, unit = '%', onSelect, selectedId, labelWidth = 120 }) {
+  const height = Math.max(150, rows.length * 22 + 48);
+  const data = rows.map(r => ({ ...r, v: r.value == null ? 0 : r.value, lbl: r.value == null ? 'No data' : unit === '%' ? `${r.value.toFixed(0)}%` : Number.isInteger(r.value) ? String(r.value) : r.value.toFixed(2), clickable: !!onSelect }));
+  return <div style={{ height }} className="w-full">
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} layout="vertical" margin={{ top: 20, right: 44, left: 4, bottom: 0 }} barCategoryGap={6}>
+        <CartesianGrid horizontal={false} stroke={C.grid} />
+        <XAxis type="number" domain={[0, max]} tick={{ fontSize: 10.5, fill: C.muted }} tickFormatter={v => `${v}${unit === '%' ? '%' : ''}`} axisLine={false} tickLine={false} allowDecimals={false} />
+        <YAxis type="category" dataKey="name" width={labelWidth} tick={{ fontSize: 11, fill: C.ink }} interval={0} axisLine={false} tickLine={false} />
+        <Tooltip cursor={{ fill: 'rgba(18,48,90,0.05)' }} content={<ChartTip />} />
+        <Bar dataKey="v" radius={[0, 3, 3, 0]} isAnimationActive={false} cursor={onSelect ? 'pointer' : 'default'}
+          onClick={(d) => { const p = d && (d.payload || d); if (onSelect && p) onSelect(p.id); }}>
+          {data.map(r => <Cell key={r.id} fill={(STATUS[r.status] || STATUS.grey).bar} fillOpacity={selectedId != null && selectedId !== '' && selectedId !== r.id ? 0.3 : 1} />)}
+          <LabelList dataKey="lbl" position="right" style={{ fontSize: 10.5, fill: C.muted }} />
+        </Bar>
+        {target != null && <ReferenceLine x={target} stroke={C.navy} strokeDasharray="4 3" strokeWidth={1.5} label={{ value: targetLabel || `Target ${target}${unit === '%' ? '%' : ''}`, position: 'top', fontSize: 10.5, fill: C.navy, fontWeight: 600 }} />}
+        {refs.map((r, i) => <ReferenceLine key={i} x={r.x} stroke={r.color} strokeDasharray={r.dash || '2 3'} label={{ value: r.label, position: i % 2 ? 'insideBottomRight' : 'top', fontSize: 10, fill: r.color }} />)}
+      </BarChart>
+    </ResponsiveContainer>
+  </div>;
+}
+function Trend({ data, lines, target, targetLabel, height = 220, max = 100, highlight, xInterval = 0 }) {
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(max * f));
+  return <div style={{ height }} className="w-full">
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data} margin={{ top: 14, right: 18, left: -8, bottom: 0 }}>
+        <CartesianGrid vertical={false} stroke={C.grid} />
+        <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: C.muted }} axisLine={{ stroke: C.line }} tickLine={false} interval={xInterval} minTickGap={6} />
+        <YAxis domain={[0, max]} ticks={ticks} tick={{ fontSize: 10.5, fill: C.muted }} tickFormatter={v => `${v}%`} axisLine={false} tickLine={false} />
+        <Tooltip formatter={(v, n) => [v == null ? '—' : `${Number(v).toFixed(1)}%`, n]} contentStyle={{ fontSize: 12, borderColor: C.line }} labelStyle={{ fontWeight: 600, color: C.ink }} />
+        {lines.length > 1 && <Legend iconSize={9} wrapperStyle={{ fontSize: 11 }} />}
+        {target != null && <ReferenceLine y={target} stroke={C.navy} strokeDasharray="4 3" label={{ value: targetLabel || `Target ${target}%`, position: 'insideTopRight', fontSize: 10.5, fill: C.navy }} />}
+        {highlight && <ReferenceLine x={highlight} stroke="#B9C3CE" strokeWidth={14} strokeOpacity={0.35} />}
+        {lines.map(l => <Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.color} strokeWidth={2.2} dot={{ r: 3, fill: '#fff', strokeWidth: 2 }} activeDot={{ r: 5 }} connectNulls isAnimationActive={false} />)}
+      </LineChart>
+    </ResponsiveContainer>
+  </div>;
+}
+function Progress({ value, target, status }) {
+  const w = value == null ? 0 : Math.min(100, value); const s = STATUS[status] || STATUS.grey;
+  return <div className="relative h-1.5 bg-[#EDF0F4] rounded-full overflow-visible">
+    <div className="h-full rounded-full" style={{ width: `${w}%`, background: s.bar }} />
+    {target != null && <div className="absolute -top-1 w-[2px] h-3.5 bg-navy" style={{ left: `calc(${Math.min(100, target)}% - 1px)` }} title={`Target ${Math.round(target)}%`} />}
+  </div>;
+}
+
+/* =========================================================================
+   6. KPI CARDS — value, status, one line of context, target and change
+   ========================================================================= */
+function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status, delta, foot, onClick, progress }) {
+  const tip = [achievement && achievement !== '—' ? `Achievement: ${achievement}` : null, foot].filter(Boolean).join(' · ');
+  return <button type="button" onClick={onClick} title={tip || undefined}
+    className="text-left bg-white border border-line rounded-lg p-4 hover:border-[#9CC9CC] hover:shadow-sm transition-shadow flex flex-col gap-2.5 min-w-0">
+    <div className="flex items-start justify-between gap-2"><span className="text-[12.5px] font-medium text-muted leading-tight">{title}</span><StatusDot status={status} /></div>
+    <div className="flex items-baseline gap-2 flex-wrap"><span className="font-cond text-[30px] leading-none font-semibold text-ink num">{value}</span>{unitNote && <span className="text-[11.5px] text-muted">{unitNote}</span>}</div>
+    {progress}
+    {sub && <div className="text-[12px] text-muted leading-snug line-clamp-2">{sub}</div>}
+    <div className="mt-auto pt-1.5 border-t border-[#F0F2F5] flex items-center justify-between gap-2 text-[11.5px]">
+      <span className="text-muted truncate">Target <span className="text-ink font-medium">{targetLabel}</span></span><span className="shrink-0">{delta}</span></div>
+  </button>;
+}
+function ach(v, t) { return v == null || t == null ? '—' : `${((100 * v) / t).toFixed(0)}% of target`; }
+
+/* =========================================================================
+   6b. SECTION TABLE — one KPI area per table: KPI group headers with count
+       sub-columns, a total row, and Table / Chart views. No status column.
+   ========================================================================= */
+function SectionTable({ title, desc, periodLabel, rowLabel, rows, total, totalLabel, onOpen, kpis, note, alpha, labelWidth = 120 }) {
+  const [view, setView] = useState(0);
+  const [ki, setKi] = useState(0);
+  const sorted = alpha === false ? rows : [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const main = (k, r, bold) => { const st = k.status ? k.status(r) : 'grey'; const v = k.rate(r); const warn = st === 'red' || st === 'amber';
+    return <span className={`num ${bold ? 'font-semibold' : 'font-medium'}`} style={{ color: warn ? STATUS[st].fg : C.ink }}>{k.fmt ? k.fmt(v, r) : k.count ? nf(v) : v == null ? '—' : `${v.toFixed(k.d || 0)}%`}</span>; };
+  const kc = kpis[Math.min(ki, kpis.length - 1)];
+  const chartRows = (kc.sortChart === false || alpha === 'chart' ? sorted : [...rows].sort((a, b) => (kc.rate(a) ?? -1) - (kc.rate(b) ?? -1)))
+    .map(r => ({ id: r.id, name: r.name, value: kc.rate(r), status: kc.status ? kc.status(r) : 'grey', tip: kc.cols.filter(c => !c.main).map(c => [c.label, c.get(r)]) }));
+  const vals = chartRows.map(r => r.value || 0);
+  const max = kc.max || (kc.count || kc.unit === 'num' ? Math.max(kc.target || 0, ...vals) * 1.15 + 1 : Math.max(110, Math.ceil(Math.max(...vals) / 10) * 10 + 10));
+  const bl = 'border-l border-white';
+  const nCols = kpis.reduce((a, k) => a + k.cols.length, 0);
+  return <section className="bg-white border border-line rounded-xl min-w-0">
+    <div className="px-5 pt-5">
+      <h2 className="text-[18px] font-semibold text-ink leading-tight">{title} · {rowLabel} wise {periodLabel && <span className="font-normal text-muted text-[15px]">({periodLabel})</span>}</h2>
+      {desc && <p className="text-[12.5px] text-muted mt-1 max-w-[120ch]">{desc}</p>}
+      <div className="flex gap-1 mt-3 border-b border-line" role="tablist">
+        {['Table view', 'Chart view'].map((t, i) => <button key={t} type="button" role="tab" aria-selected={view === i} onClick={() => setView(i)}
+          className={`px-5 py-2.5 text-[14px] -mb-px border-b-2 ${view === i ? 'border-[#3B6FD8] text-ink font-medium' : 'border-transparent text-muted hover:text-ink'}`}>{t}</button>)}
+      </div>
+    </div>
+    {view === 0 ? <div className="p-5 pt-4"><div className="scroll-x rounded-md">
+      <table className="w-full text-[13px] border-collapse" style={{ minWidth: Math.max(760, 170 + nCols * 96) }}>
+        <thead>
+          <tr className="bg-[#EEF0F4]">
+            <th rowSpan={2} className="px-4 py-3 text-left text-[13px] font-semibold text-ink align-middle min-w-[140px]">{rowLabel} name</th>
+            {kpis.map(k => <th key={k.k} colSpan={k.cols.length} className={`px-3 pt-3 pb-1 text-[13px] font-semibold text-ink text-center ${bl}`}>
+              <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: k.dot }} />{k.label}<InfoTip text={k.info} /></span>
+              {k.tl && <div className="text-[11px] font-normal text-muted mt-0.5">{k.tl}</div>}</th>)}
+          </tr>
+          <tr className="bg-[#EEF0F4]">{kpis.flatMap(k => k.cols.map((c, i) => <th key={k.k + i} className={`px-3 py-2.5 text-[12px] font-medium text-muted text-center whitespace-nowrap ${i === 0 ? bl : ''}`}>{c.label}</th>))}</tr>
+        </thead>
+        <tbody>
+          {sorted.map(r => <tr key={r.id} onClick={onOpen ? () => onOpen(r.id) : undefined} className={`border-b border-[#ECEEF2] ${onOpen ? 'hover:bg-[#F7F9FC] cursor-pointer' : ''}`}>
+            <td className="px-4 py-3 text-ink">{r.name}{r.sub && <div className="text-[11px] text-muted">{r.sub}</div>}</td>
+            {kpis.flatMap(k => k.cols.map((c, i) => <td key={k.k + i} className={`px-3 py-3 text-center whitespace-nowrap ${c.main ? '' : 'text-[#3D4A57] num'}`}>{c.main ? main(k, r) : c.get(r)}</td>))}
+          </tr>)}
+          {total && <tr className="bg-[#EFEDF8] font-semibold">
+            <td className="px-4 py-3 text-ink">{totalLabel}</td>
+            {kpis.flatMap(k => k.cols.map((c, i) => <td key={k.k + i} className="px-3 py-3 text-center num whitespace-nowrap">{c.main ? main(k, total, true) : c.get(total)}</td>))}
+          </tr>}
+        </tbody>
+      </table></div>
+      {note && <div className="text-[11.5px] text-muted mt-3">{note}</div>}
+    </div>
+    : <div className="p-5 pt-4">
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <Seg options={kpis.map(k => k.short || k.label)} value={ki} onChange={setKi} />
+        {total && <span className="text-[12.5px] text-muted">{totalLabel}: {main(kc, total, true)}{kc.tl ? ` · ${kc.tl}` : ''}</span>}
+      </div>
+      <HBar rows={chartRows} target={kc.target} unit={kc.count || kc.unit === 'num' ? 'count' : '%'} max={max} onSelect={onOpen} labelWidth={labelWidth} refs={kc.refs || []} />
+    </div>}
+  </section>;
+}
+
+/* =========================================================================
+   4. COACH KPIs — "4. Individual Coach Level View" (KF review copy, 6 KPIs)
+   ========================================================================= */
+const DEFAULT_SETTINGS = { band: 10, engTarget: null, priority: [1, 3, 5] };
+const SKEY = 'sparc-coach-v2-settings';
+function loadSettings() { try { const s = JSON.parse(localStorage.getItem(SKEY) || 'null'); return s ? { ...DEFAULT_SETTINGS, ...s } : DEFAULT_SETTINGS; } catch (e) { return DEFAULT_SETTINGS; } }
+function saveSettings(s) { try { localStorage.setItem(SKEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
+const STATUS = {
+  green:    { label: 'On pace',               fg: '#1F6B30', bg: '#E6F2E8', dot: '#2E8540', bar: '#2E8540', rank: 1 },
+  amber:    { label: 'Slightly behind',       fg: '#8A5600', bg: '#FDF1DC', dot: '#D98A00', bar: '#D98A00', rank: 2 },
+  red:      { label: 'Behind pace',           fg: '#9E2A22', bg: '#FBE7E5', dot: '#C8372D', bar: '#C8372D', rank: 3 },
+  grey:     { label: 'Target not set',        fg: '#55606C', bg: '#EEF1F4', dot: '#9AA4B0', bar: '#5E7A99', rank: 0 },
+  nodata:   { label: 'No data yet',           fg: '#6B7682', bg: '#F1F3F5', dot: '#C3CAD2', bar: '#C3CAD2', rank: 0 },
+  progress: { label: 'In progress',           fg: '#2F5A87', bg: '#E7EFF8', dot: '#4A78A8', bar: '#4A78A8', rank: 0 },
+};
+const hb = (v, t, band) => (v == null ? 'nodata' : t == null ? 'grey' : v >= t - 1e-9 ? 'green' : v >= t - band ? 'amber' : 'red');
+const f1 = v => (v == null ? '—' : `${v.toFixed(1)}%`);
+const f0 = v => (v == null ? '—' : `${Math.round(v)}%`);
+const nf = v => (v == null ? '—' : v.toLocaleString('en-IN'));
+const LEVEL = ['Not observed', 'Level 1', 'Level 2', 'Level 3', 'Level 4'];
+const workDays = (a, b) => { let n = 0; for (let d = a; d <= b; d++) if (dow(d) !== 0) n++; return n; };
+const kmOf = sid => 2 + ((sid * 37) % 23) + ((sid * 13) % 10) / 10; // demo distance from the coach's base
+const RAG = { green: 'Green', amber: 'Orange', red: 'Red' };
+
+function coachData(cid, q, asOf, priority) {
+  const { O, firstIdx } = DB;
+  const c = DB.coaches[cid];
+  const teachers = DB.teachers.filter(t => t.coach === cid);
+  const schools = DB.schools.filter(s => s.coach === cid);
+  const from = q.from, to = Math.min(q.end, asOf);
+  const mo = MONTHS.find(m => m.from <= to && m.end >= to) || MONTHS[MONTHS.length - 1];
+  const hist = {}; teachers.forEach(t => { hist[t.id] = []; });
+  const firstSeenT = {}, firstSeenS = {}, schoolLast = {}, monthS = new Set();
+  for (let i = 0; i < firstIdx[asOf + 1]; i++) {
+    if (O.c[i] !== cid) continue; const t = O.t[i], d = O.day[i], s = DB.teachers[t].school;
+    hist[t].push(i); schoolLast[s] = d;
+    if (d >= from && d <= to) { if (firstSeenS[s] == null) firstSeenS[s] = d; if (O.valid[i] && firstSeenT[t] == null) firstSeenT[t] = d; }
+    if (d >= mo.from && d <= to) monthS.add(s);
+  }
+  const tInfo = teachers.map(t => {
+    const L = hist[t.id]; const inQ = L.filter(i => O.day[i] >= from && O.day[i] <= to && O.valid[i]);
+    const q_ = Array(NQ).fill(0);
+    inQ.forEach(i => { for (let k = 0; k < NQ; k++) { const v = O.resp[i * NQ + k]; if (v) q_[k] = v; } });
+    const engI = [...inQ].reverse().find(i => O.resp[i * NQ + 8] && O.resp[i * NQ + 9] && O.resp[i * NQ + 10]);
+    const lastValidAll = [...L].reverse().find(i => O.valid[i]);
+    return { t, nQ: inQ.length, latest: inQ.length ? inQ[inQ.length - 1] : -1, q: q_, eng: engI == null ? null : [8, 9, 10].map(k => O.resp[engI * NQ + k]), engDay: engI == null ? -1 : O.day[engI],
+      lastAll: lastValidAll != null ? lastValidAll : -1, lastDay: lastValidAll != null ? O.day[lastValidAll] : -1, hist: L };
+  });
+  const observed = tInfo.filter(x => x.nQ > 0).length;
+  const visited = schools.filter(s => firstSeenS[s.id] != null).length;
+  const wdTot = workDays(q.from, q.end), wdDone = workDays(q.from, to);
+  const expected = Math.min(100, (100 * wdDone) / wdTot);
+  const series = []; let ws = q.from - ((dow(q.from) + 6) % 7);
+  for (; ws <= to; ws += 7) {
+    const we = Math.min(ws + 6, to);
+    series.push({ label: fmtShort(Math.max(ws, q.from)),
+      teachers: teachers.length ? (100 * Object.values(firstSeenT).filter(d => d <= we).length) / teachers.length : null,
+      schools: schools.length ? (100 * Object.values(firstSeenS).filter(d => d <= we).length) / schools.length : null,
+      expected: (100 * workDays(q.from, we)) / wdTot });
+  }
+  const withLatest = tInfo.filter(x => x.latest >= 0);
+  const practices = priority.map(k => { const using = withLatest.filter(x => O.resp[x.latest * NQ + k] >= 3); return { k, n: withLatest.length, using: using.length, pct: pct(using.length, withLatest.length), notUsing: withLatest.filter(x => !(O.resp[x.latest * NQ + k] >= 3)) }; });
+  const comp = COMP_Q.map(k => { const a = withLatest.filter(x => O.resp[x.latest * NQ + k]); const met = a.filter(x => O.resp[x.latest * NQ + k] >= 3); return { k, n: a.length, using: met.length, pct: pct(met.length, a.length), notUsing: a.filter(x => O.resp[x.latest * NQ + k] < 3) }; });
+  const engT = tInfo.filter(x => x.eng); const engMet = engT.filter(x => x.eng.filter(v => v >= 3).length >= 2);
+  return { c, teachers, schools, tInfo, observed, visited, teacherCov: pct(observed, teachers.length), schoolCov: pct(visited, schools.length), expected, wdTot, wdDone, series,
+    practices, comp, engT, engMet: engMet.length, eng: pct(engMet.length, engT.length), firstSeenS, schoolLast, to, mo, monthVisited: monthS.size };
+}
+
+/* =========================================================================
+   7. APP — Individual Coach view, mobile-first (phone frame on desktop)
+   ========================================================================= */
+const PAGES = [
+  { key: 'home', label: 'Home', icon: 'Home' },
+  { key: 'todo', label: 'Visits', icon: 'MapPinned' },
+  { key: 'practice', label: 'Practice', icon: 'GraduationCap' },
+  { key: 'engagement', label: 'Students', icon: 'MessagesSquare' },
+  { key: 'history', label: 'Teachers', icon: 'History' },
+];
+const pageFromHash = () => { const h = (location.hash || '').replace('#', ''); return PAGES.some(p => p.key === h) ? h : 'home'; };
+const DEFAULT_COACH = (() => { const q = QUARTERS[2]; const ids = DB.districts[0].coaches.filter(c => DB.coaches[c].join <= q.from);
+  return ids.find(c => { const d = coachData(c, q, q.to, DEFAULT_SETTINGS.priority); return d.visited < d.schools.length && d.observed < d.teachers.length && d.schools.length >= 5; }) ?? ids[0]; })();
+
+function App() {
+  const [page, setPage] = useState(pageFromHash());
+  const [district, setDistrict] = useState(DB.coaches[DEFAULT_COACH].district);
+  const [coach, setCoach] = useState(DEFAULT_COACH);
+  const [qKey, setQKey] = useState('Q3');
+  const [todoTab, setTodoTab] = useState(0);
+  const [histSel, setHistSel] = useState(null);
+  const [settings, setSettingsState] = useState(loadSettings);
+  const [showSettings, setShowSettings] = useState(false);
+  useEffect(() => { const on = () => setPage(pageFromHash()); window.addEventListener('hashchange', on); return () => window.removeEventListener('hashchange', on); }, []);
+  const go = (k, tab) => { if (tab != null) setTodoTab(tab); if (location.hash !== '#' + k) location.hash = k; setPage(k); const sc = document.getElementById('app-scroll'); if (sc) sc.scrollTop = 0; window.scrollTo({ top: 0 }); };
+  const openTeacher = id => { setHistSel(id); go('history'); };
+  const setSettings = s => { setSettingsState(s); saveSettings(s); };
+  const q = QUARTERS.find(x => x.key === qKey); const asOf = q.to; const live = q.end > ASOF;
+  const cd = useMemo(() => coachData(coach, q, asOf, settings.priority), [coach, qKey, settings.priority]);
+  const unsynced = useMemo(() => unsyncedForms(asOf, { district: DB.coaches[coach].district, block: '', coach }), [coach, asOf]);
+  useEffect(() => { setHistSel(null); }, [coach]);
+  const shared = { cd, q, asOf, live, settings, go, todoTab, setTodoTab, histSel, setHistSel, openTeacher };
+  const c = cd.c;
+  const badge = { todo: (cd.teachers.length - cd.observed) + (cd.schools.length - cd.visited) };
+  return <div className="min-h-full bg-[#E9EDF2] md:py-6">
+    {/* prototype controls: outside the phone, not part of the app */}
+    <div className="gutter md:mb-5 bg-white md:bg-transparent border-b border-line md:border-0 py-2.5">
+      <div className="max-w-[1200px] mx-auto flex flex-wrap items-end gap-3">
+        <div className="hidden md:block mr-auto"><div className="font-cond text-[18px] font-semibold text-navy leading-tight">SPARC – Individual Coach View</div>
+          <div className="text-[12px] text-muted">Mobile prototype · <span className="text-[#8A5600] font-semibold">DEMO DATA</span> · the selectors here exist only in the prototype</div></div>
+        <Sel id="f-district" label="District" value={district} onChange={v => { const d = Number(v); setDistrict(d); setCoach(DB.districts[d].coaches[0]); }}>{DB.districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
+        <Sel id="f-coach" label="View as coach" value={coach} onChange={v => setCoach(Number(v))}>{DB.districts[district].coaches.map(id => <option key={id} value={id}>{DB.coaches[id].code}</option>)}</Sel>
+        <Sel id="f-q" label="Quarter" value={qKey} onChange={setQKey}>{QUARTERS.map(x => <option key={x.key} value={x.key}>{x.short} · {x.label.split('·')[1].trim()}</option>)}</Sel>
+        <button type="button" onClick={() => setShowSettings(true)} className="h-8 inline-flex items-center gap-1.5 rounded border border-line bg-white px-3 text-[12.5px] text-ink hover:border-teal"><Icon name="SlidersHorizontal" size={14} />Settings</button>
+      </div>
+    </div>
+    {/* the phone */}
+    <div className="mx-auto w-full md:w-[392px] md:h-[min(852px,calc(100vh-130px))] md:min-h-[640px] md:rounded-[44px] md:border-[10px] md:border-[#0E1A2B] md:shadow-[0_24px_60px_rgba(11,27,51,0.28)] bg-canvas md:overflow-hidden flex flex-col relative">
+      <header className="sticky md:static top-0 z-30 bg-navy text-white px-4 pt-3 pb-3 md:pt-5" style={{ paddingTop: 'max(12px, env(safe-area-inset-top, 0px))' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#7FD3D8] text-navy grid place-items-center shrink-0 font-cond font-semibold">{c.code.slice(-2)}</div>
+          <div className="min-w-0 flex-1"><div className="text-[16px] font-semibold leading-tight">{c.code}</div><div className="text-[11.5px] text-white/70 truncate">{DB.districts[c.district].name} · {DB.blocks[c.block].short} · {q.short}</div></div>
+          <div className="text-right text-[10.5px] text-white/70 leading-tight"><div className="inline-flex items-center gap-1"><Icon name={unsynced.length ? 'CloudOff' : 'Cloud'} size={13} />{unsynced.length ? `${unsynced.length} unsynced` : 'Synced'}</div><div>{live ? 'Updated' : 'Closed'} {fmtShort(asOf)}</div></div>
+        </div>
+      </header>
+      <main id="app-scroll" className="flex-1 md:overflow-y-auto px-3.5 pt-3.5 pb-24 md:pb-4">
+        {c.join > q.from && <div className="mb-3"><Note tone="info">Deployed on {fmtDay(c.join)}, after the quarter started. Pace counts from the start of the quarter.</Note></div>}
+        {page === 'home' && <HomePage {...shared} />}
+        {page === 'todo' && <TodoPage {...shared} />}
+        {page === 'practice' && <PracticePage {...shared} />}
+        {page === 'engagement' && <EngagementPage {...shared} />}
+        {page === 'history' && <HistoryPage {...shared} />}
+        <div className="text-[10.5px] text-muted text-center mt-5 px-2">Demo data for design review. KPIs follow the “4. Individual Coach Level View” sheet (KF review copy). Your own allotment only; no ranking against other coaches.</div>
+      </main>
+      <nav className="fixed md:static bottom-0 inset-x-0 z-30 bg-white border-t border-line grid grid-cols-5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} aria-label="App sections">
+        {PAGES.map(pg => <button key={pg.key} type="button" onClick={() => go(pg.key)} aria-current={page === pg.key ? 'page' : undefined}
+          className={`relative flex flex-col items-center gap-0.5 pt-2 pb-2 text-[10.5px] ${page === pg.key ? 'text-teal font-semibold' : 'text-muted'}`}>
+          <Icon name={pg.icon} size={20} />{pg.label}
+          {badge[pg.key] > 0 && <span className="absolute top-1 left-1/2 ml-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#C8372D] text-white text-[10px] font-semibold grid place-items-center">{badge[pg.key]}</span>}
+        </button>)}
+      </nav>
+    </div>
+    {showSettings && <SettingsModal settings={settings} onClose={() => setShowSettings(false)} onSave={s => { setSettings(s); setShowSettings(false); }} />}
+  </div>;
+}
+function Sel({ id, label, value, onChange, children }) {
+  return <label htmlFor={id} className="flex flex-col gap-0.5 min-w-0">
+    <span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">{label}</span>
+    <select id={id} value={value} onChange={e => onChange(e.target.value)} className="h-8 rounded border border-line bg-white px-2 text-[12.5px] text-ink min-w-[120px]">{children}</select>
+  </label>;
+}
+/* ---- mobile building blocks ---- */
+function MCard({ title, info, right, children, className = '' }) {
+  return <section className={`bg-white rounded-2xl border border-[#E4E8EE] p-4 ${className}`}>
+    {(title || right) && <div className="flex items-center justify-between gap-2 mb-3"><div className="flex items-center gap-1 min-w-0"><h3 className="text-[14.5px] font-semibold text-ink">{title}</h3>{info && <InfoTip text={info} />}</div>{right}</div>}
+    {children}
+  </section>;
+}
+const SecTitle = ({ children }) => <h2 className="text-[12px] font-semibold uppercase tracking-[0.06em] text-muted mt-5 mb-2 px-1">{children}</h2>;
+function Chips({ options, value, onChange }) {
+  return <div className="flex gap-1.5 overflow-x-auto -mx-3.5 px-3.5 pb-1" role="tablist">{options.map((o, i) => <button key={i} type="button" role="tab" aria-selected={value === i} onClick={() => onChange(i)}
+    className={`shrink-0 px-3 py-1.5 rounded-full text-[12.5px] border ${value === i ? 'bg-navy text-white border-navy' : 'bg-white text-ink border-line'}`}>{o}</button>)}</div>;
+}
+function MBar({ value, target, color }) {
+  return <div className="relative h-2 bg-[#EDF0F4] rounded-full"><div className="h-full rounded-full" style={{ width: `${Math.min(100, value || 0)}%`, background: color || C.teal }} />
+    {target != null && <div className="absolute -top-1 w-[2px] h-4 bg-navy rounded" style={{ left: `calc(${Math.min(100, target)}% - 1px)` }} />}</div>;
+}
+const Empty = ({ children }) => <div className="text-[13px] text-muted text-center py-8">{children}</div>;
+const ListRow = ({ children, onClick }) => onClick ? <button type="button" onClick={onClick} className="w-full text-left flex items-center gap-3 py-3 border-b border-[#F0F2F5] last:border-0">{children}</button>
+  : <div className="flex items-center gap-3 py-3 border-b border-[#F0F2F5] last:border-0">{children}</div>;
+const RateChip = ({ v }) => <span className="inline-block w-7 rounded text-center num text-[12px] py-0.5" style={{ background: !v ? '#F1F3F5' : v >= 3 ? '#E6F2E8' : '#FDF1DC', color: !v ? '#9AA4B0' : v >= 3 ? '#1F6B30' : '#8A5600' }}>{v ? v : 'NO'}</span>;
+
+/* ---------------- Home ---------------- */
+function HomePage(p) {
+  const { cd, q, settings, go } = p;
+  const exp = cd.expected; const band = settings.band;
+  const tSt = hb(cd.teacherCov, exp, band), sSt = hb(cd.schoolCov, exp, band);
+  const pendT = cd.teachers.length - cd.observed, toVisit = cd.schools.length - cd.visited;
+  const pr = cd.practices.filter(x => x.pct != null).sort((a, b) => b.pct - a.pct);
+  const best = pr[0], least = pr.length > 1 ? pr[pr.length - 1] : null;
+  const te = settings.engTarget;
+  const tile = (label, v, n, d, st, sub, onClick) => <button type="button" onClick={onClick} className="text-left bg-white rounded-2xl border border-[#E4E8EE] p-3.5 min-w-0">
+    <div className="flex items-center justify-between gap-1"><span className="text-[12px] text-muted">{label}</span><span className="inline-flex items-center gap-1 text-[10.5px] font-semibold" style={{ color: STATUS[st].fg }}><span className="w-2 h-2 rounded-full" style={{ background: STATUS[st].dot }} />{RAG[st] || ''}</span></div>
+    <div className="font-cond text-[30px] font-semibold leading-none mt-1.5 num" style={{ color: st === 'red' || st === 'amber' ? STATUS[st].fg : C.ink }}>{f0(v)}</div>
+    <div className="text-[11.5px] text-muted mt-0.5 mb-2">{n} of {d}{sub ? ` · ${sub}` : ''}</div>
+    <MBar value={v} target={exp} color={STATUS[st].bar} />
+  </button>;
+  const next = [
+    toVisit ? { icon: 'MapPin', t: `${toVisit} school${toVisit === 1 ? '' : 's'} not visited yet`, s: 'Step 1: every school gets at least one visit', tone: 'red', go: ['todo', 0] } : { icon: 'Check', t: 'Every school visited this quarter', s: 'Step 1 done: now reach the remaining teachers', tone: 'green', go: null },
+    pendT ? { icon: 'UserCheck', t: `${pendT} teacher${pendT === 1 ? '' : 's'} to observe`, s: 'Step 2: pending teachers, school by school', tone: 'amber', go: ['todo', 1] } : { icon: 'Check', t: 'Every teacher observed this quarter', s: 'Well done', tone: 'green', go: null },
+  ];
+  return <div>
+    <SecTitle>My allotment</SecTitle>
+    <div className="grid grid-cols-2 gap-2.5">
+      {[['School', 'Schools allotted', cd.schools.length], ['Users', 'Teachers allotted', cd.teachers.length]].map(([ic, l, v]) => <div key={l} className="bg-white rounded-2xl border border-[#E4E8EE] p-3.5 flex items-center gap-3">
+        <span className="w-9 h-9 rounded-xl bg-[#EAF4F5] text-teal grid place-items-center shrink-0"><Icon name={ic} size={17} /></span>
+        <span><span className="block font-cond text-[24px] font-semibold leading-none num">{v}</span><span className="block text-[11.5px] text-muted mt-0.5">{l}</span></span></div>)}
+    </div>
+    <SecTitle>This quarter · {q.short}</SecTitle>
+    <div className="grid grid-cols-2 gap-2.5">
+      {tile('Teachers observed', cd.teacherCov, cd.observed, cd.teachers.length, tSt, 'main measure', () => go('todo', 1))}
+      {tile('Schools visited', cd.schoolCov, cd.visited, cd.schools.length, sSt, null, () => go('todo', 0))}
+    </div>
+    <div className="text-[11.5px] text-muted mt-2 px-1">Target: 100% of your allotment by quarter end. Expected today <b className="text-ink">{f0(exp)}</b> ({cd.wdDone} of {cd.wdTot} working days); the navy tick on each bar is this pace. Schools visited in {cd.mo.short}: <b className="text-ink">{cd.monthVisited}</b>.</div>
+    <SecTitle>What to do next</SecTitle>
+    <MCard>{next.map((a, i) => <button key={i} type="button" onClick={a.go ? () => go(a.go[0], a.go[1]) : undefined} className="w-full text-left flex items-center gap-3 py-2.5 border-b border-[#F0F2F5] last:border-0">
+      <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0" style={{ background: STATUS[a.tone].bg, color: STATUS[a.tone].fg }}><Icon name={a.icon} size={17} /></span>
+      <span className="flex-1 min-w-0"><span className="block text-[13.5px] font-medium text-ink">{a.t}</span><span className="block text-[11.5px] text-muted">{a.s}</span></span>
+      {a.go && <Icon name="ChevronRight" size={17} className="text-muted" />}</button>)}</MCard>
+    <SecTitle>My teachers’ practice</SecTitle>
+    <div className="grid grid-cols-2 gap-2.5">
+      <button type="button" onClick={() => go('practice')} className="text-left rounded-2xl p-3.5 bg-[#EEF7F0] border border-[#CFE6D4]"><div className="text-[10.5px] font-semibold text-[#1F6B30] uppercase tracking-wide">Best practice</div><div className="font-cond text-[24px] font-semibold text-ink leading-tight mt-1">{best ? Q_LABEL[best.k] : '—'}</div><div className="text-[11.5px] text-muted">{best ? `${f0(best.pct)} of teachers using it` : 'No observations yet'}</div></button>
+      <button type="button" onClick={() => go('practice')} className="text-left rounded-2xl p-3.5 bg-[#FDF5E6] border border-[#F1D9A6]"><div className="text-[10.5px] font-semibold text-[#8A5600] uppercase tracking-wide">Least used</div><div className="font-cond text-[24px] font-semibold text-ink leading-tight mt-1">{least ? Q_LABEL[least.k] : '—'}</div><div className="text-[11.5px] text-muted">{least ? `${f0(least.pct)} of teachers using it` : 'No observations yet'}</div></button>
+    </div>
+    <button type="button" onClick={() => go('engagement')} className="w-full text-left mt-2.5 bg-white rounded-2xl border border-[#E4E8EE] p-3.5 flex items-center gap-3">
+      <span className="w-9 h-9 rounded-xl bg-[#FDF1DC] text-[#8A5600] grid place-items-center shrink-0"><Icon name="MessagesSquare" size={17} /></span>
+      <span className="flex-1 min-w-0"><span className="block text-[12px] text-muted">Student engagement benchmark</span><span className="block text-[13.5px] text-ink"><b className="font-cond text-[20px] num">{f0(cd.eng)}</b> <span className="text-[11.5px] text-muted">{cd.engMet} of {cd.engT.length} teachers · target {te == null ? 'X%' : `${te}%`}</span></span></span>
+      <Icon name="ChevronRight" size={17} className="text-muted" /></button>
+    <SecTitle>Pace this quarter</SecTitle>
+    <MCard title="Coverage against pace" info={`Expected coverage = 100% × working days elapsed ÷ working days in the quarter (Monday–Saturday). Green at or above pace, orange within ${band} points, red further behind.`}>
+      <div style={{ height: 180 }}><ResponsiveContainer width="100%" height="100%">
+        <LineChart data={cd.series} margin={{ top: 6, right: 6, left: -22, bottom: 0 }}>
+          <CartesianGrid vertical={false} stroke={C.grid} />
+          <XAxis dataKey="label" tick={{ fontSize: 10, fill: C.muted }} axisLine={{ stroke: C.line }} tickLine={false} interval="preserveStartEnd" minTickGap={18} />
+          <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: 10, fill: C.muted }} tickFormatter={v => `${v}%`} axisLine={false} tickLine={false} />
+          <Tooltip formatter={(v, n) => [v == null ? '—' : `${Number(v).toFixed(0)}%`, n]} contentStyle={{ fontSize: 12 }} labelFormatter={l => `Week of ${l}`} />
+          <Line type="monotone" dataKey="expected" name="Expected" stroke={C.navy} strokeDasharray="5 4" strokeWidth={1.6} dot={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="teachers" name="Teachers" stroke={C.teal} strokeWidth={2.4} dot={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="schools" name="Schools" stroke="#C77C02" strokeWidth={2} dot={false} isAnimationActive={false} />
+        </LineChart></ResponsiveContainer></div>
+      <div className="flex justify-center gap-4 text-[11px] text-muted mt-1"><span className="inline-flex items-center gap-1"><span className="w-3 h-0.5 bg-teal" />Teachers</span><span className="inline-flex items-center gap-1"><span className="w-3 h-0.5 bg-[#C77C02]" />Schools</span><span className="inline-flex items-center gap-1"><span className="w-3 border-t border-dashed border-navy" />Expected</span></div>
+    </MCard>
+  </div>;
+}
+
+/* ---------------- Visits (pending schools, pending teachers) ---------------- */
+function TodoPage(p) {
+  const { cd, q, todoTab, setTodoTab, openTeacher } = p;
+  const [open, setOpen] = useState({});
+  const pendingT = cd.tInfo.filter(x => x.nQ === 0);
+  const bySchool = cd.schools.map(s => ({ s, teachers: pendingT.filter(x => x.t.school === s.id), visited: cd.firstSeenS[s.id] != null })).filter(g => g.teachers.length)
+    .sort((a, b) => a.visited - b.visited || kmOf(a.s.id) - kmOf(b.s.id));
+  const toVisit = cd.schools.filter(s => cd.firstSeenS[s.id] == null).map(s => ({ s, km: kmOf(s.id), last: cd.schoolLast[s.id] })).sort((a, b) => a.km - b.km);
+  const tabs = [`1 · Schools to visit (${toVisit.length})`, `2 · Teachers to observe (${pendingT.length})`];
+  return <div>
+    <h1 className="text-[20px] font-semibold text-ink px-1 mb-1">Plan my visits</h1>
+    <p className="text-[12px] text-muted px-1 mb-3">First make sure every allotted school has at least one visit, then reach the remaining teachers in each school. Teacher coverage is the main measure of progress.</p>
+    <Chips options={tabs} value={todoTab} onChange={setTodoTab} />
+    {todoTab === 0 && <><p className="text-[12px] text-muted px-1 mt-2 mb-3">Schools with no visit since {fmtShort(q.from)}, nearest first. A school counts as visited once any one of its teachers is observed.</p>
+      <MCard>{toVisit.length === 0 ? <Empty>Every allotted school has had a visit this quarter.</Empty> : toVisit.map(x => <ListRow key={x.s.id}>
+        <span className="w-9 h-9 rounded-xl bg-[#FBE7E5] text-[#9E2A22] grid place-items-center shrink-0"><Icon name="MapPin" size={17} /></span>
+        <span className="flex-1 min-w-0"><span className="block text-[13.5px] font-medium">{x.s.code}</span><span className="block text-[11.5px] text-muted">{x.s.nT} teachers · {x.last != null ? `last visit ${fmtShort(x.last)}` : 'never visited'}</span></span>
+        <span className="text-[12.5px] font-semibold num whitespace-nowrap">{x.km.toFixed(1)} km</span></ListRow>)}</MCard></>}
+    {todoTab === 1 && <><p className="text-[12px] text-muted px-1 mt-2 mb-3">Allotted teachers with no observation since {fmtShort(q.from)}, school by school (schools not yet visited first, then nearest). Tap a teacher to see what was discussed last time.</p>
+      {bySchool.length === 0 ? <MCard><Empty>Every allotted teacher has been observed this quarter.</Empty></MCard> :
+      <div className="flex flex-col gap-2">{bySchool.map(g => { const isOpen = open[g.s.id] ?? true; return <div key={g.s.id} className="bg-white rounded-2xl border border-[#E4E8EE]">
+        <button type="button" onClick={() => setOpen(o => ({ ...o, [g.s.id]: !isOpen }))} aria-expanded={isOpen} className="w-full text-left flex items-center justify-between gap-2 p-3.5">
+          <span className="min-w-0"><span className="block text-[14px] font-semibold text-ink">{g.s.code}</span><span className="block text-[11.5px] text-muted">{g.teachers.length} of {g.s.nT} pending · {kmOf(g.s.id).toFixed(1)} km</span></span>
+          <span className="flex items-center gap-2">{!g.visited && <Pill status="red" small label="Not visited" />}<Icon name={isOpen ? 'ChevronUp' : 'ChevronDown'} size={16} className="text-muted" /></span></button>
+        {isOpen && <div className="px-3.5 pb-1">{g.teachers.map(x => <ListRow key={x.t.id} onClick={() => openTeacher(x.t.id)}><Icon name="User" size={16} className="text-muted" /><span className="flex-1 text-[13.5px] font-medium">{x.t.code}</span><span className="text-[11.5px] text-muted">{x.lastDay >= 0 ? `last ${fmtShort(x.lastDay)}` : 'never observed'}</span><Icon name="ChevronRight" size={15} className="text-muted" /></ListRow>)}</div>}
+      </div>; })}</div>}</>}
+  </div>;
+}
+
+/* ---------------- Practice (best / least prioritised competency) ---------------- */
+function PracticePage(p) {
+  const { cd, settings, openTeacher } = p;
+  const [set, setSet] = useState(0); const [openK, setOpenK] = useState(null); const [mode, setMode] = useState(0);
+  const list = set === 0 ? cd.practices : cd.comp;
+  const pr = [...list].sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
+  const ranked = pr.filter(x => x.pct != null); const best = ranked[0], least = ranked.length > 1 ? ranked[ranked.length - 1] : null;
+  const drill = x => {
+    if (x.notUsing.length === 0) return <div className="text-[12px] text-muted pb-3 pl-11">Every observed teacher uses this practice.</div>;
+    if (mode === 0) return <div className="pb-2">{x.notUsing.map(t => <button type="button" key={t.t.id} onClick={() => openTeacher(t.t.id)} className="w-full text-left flex items-center gap-2 py-1.5 pl-11 text-[12.5px]">
+      <span className="flex-1"><span className="font-medium">{t.t.code}</span> <span className="text-muted">· {DB.schools[t.t.school].code}</span></span><Pill status={DB.O.resp[t.latest * NQ + x.k] === 1 ? 'red' : DB.O.resp[t.latest * NQ + x.k] ? 'amber' : 'nodata'} small label={LEVEL[DB.O.resp[t.latest * NQ + x.k]]} /></button>)}</div>;
+    const g = {}; x.notUsing.forEach(t => { (g[t.t.school] = g[t.t.school] || []).push(t); });
+    const obsBy = {}; cd.tInfo.filter(t => t.latest >= 0).forEach(t => { obsBy[t.t.school] = (obsBy[t.t.school] || 0) + 1; });
+    return <div className="pb-2">{Object.entries(g).sort((a, b) => b[1].length - a[1].length).map(([s, ts]) => <div key={s} className="flex items-center gap-2 py-1.5 pl-11 text-[12.5px]">
+      <span className="flex-1 font-medium">{DB.schools[s].code}</span><span className="text-muted">{ts.length} of {obsBy[s]} not yet using</span></div>)}</div>;
+  };
+  return <div>
+    <h1 className="text-[20px] font-semibold text-ink px-1 mb-1">My teachers’ practice</h1>
+    <p className="text-[12px] text-muted px-1 mb-3">Your own teachers on their latest valid observation this quarter. A coaching aid for planning your next conversations; there is no target.</p>
+    <Chips options={['Prioritised practices', 'All Q1–Q8']} value={set} onChange={i => { setSet(i); setOpenK(null); }} />
+    <div className="grid grid-cols-2 gap-2.5 mt-3">
+      <div className="rounded-2xl p-3.5 bg-[#EEF7F0] border border-[#CFE6D4]"><div className="text-[10.5px] font-semibold text-[#1F6B30] uppercase tracking-wide">Best performing</div><div className="font-cond text-[26px] font-semibold text-ink leading-tight mt-1">{best ? Q_LABEL[best.k] : '—'}</div><div className="text-[11.5px] text-muted">{best ? `${best.using} of ${best.n} teachers (${f0(best.pct)})` : 'No observations yet'}</div></div>
+      <div className="rounded-2xl p-3.5 bg-[#FDF5E6] border border-[#F1D9A6]"><div className="text-[10.5px] font-semibold text-[#8A5600] uppercase tracking-wide">Least performing</div><div className="font-cond text-[26px] font-semibold text-ink leading-tight mt-1">{least ? Q_LABEL[least.k] : '—'}</div><div className="text-[11.5px] text-muted">{least ? `${least.using} of ${least.n} teachers (${f0(least.pct)})` : 'No observations yet'}</div></div>
+    </div>
+    <SecTitle>Tap a practice to see who isn’t using it</SecTitle>
+    <MCard title={set === 0 ? `Prioritised: ${settings.priority.map(k => Q_LABEL[k]).join(', ')}` : 'Q1–Q8'} info="% of your teachers at the benchmark (Level 3 or above) on each practice in their latest valid observation this quarter. Drill down teacher-wise or school-wise."
+      right={<div className="inline-flex rounded-lg border border-line overflow-hidden text-[11.5px]">{['Teachers', 'Schools'].map((l, i) => <button key={l} type="button" onClick={() => setMode(i)} className={`px-2 py-1 ${mode === i ? 'bg-navy text-white' : 'bg-white text-ink'}`}>{l}</button>)}</div>}>
+      {pr.map(x => { const open = openK === x.k; const isB = best && x.k === best.k, isL = least && x.k === least.k; return <div key={x.k} className="border-b border-[#F0F2F5] last:border-0">
+        <button type="button" onClick={() => setOpenK(open ? null : x.k)} aria-expanded={open} className="w-full text-left py-3 flex items-center gap-3">
+          <span className="w-8 font-semibold text-[13.5px]">{Q_LABEL[x.k]}</span>
+          <span className="flex-1"><MBar value={x.pct} color={isL ? '#D98A00' : isB ? '#2E8540' : C.teal} /><span className="block text-[11px] text-muted mt-1">{x.using} of {x.n} teachers{isB ? ' · best' : isL ? ' · least' : ''}</span></span>
+          <span className="w-11 text-right font-semibold num text-[14px]">{f0(x.pct)}</span><Icon name={open ? 'ChevronUp' : 'ChevronDown'} size={15} className="text-muted" /></button>
+        {open && drill(x)}
+      </div>; })}
+    </MCard>
+  </div>;
+}
+
+/* ---------------- Student engagement ---------------- */
+function EngagementPage(p) {
+  const { cd, settings, openTeacher } = p;
+  const [only, setOnly] = useState(0);
+  const te = settings.engTarget; const st = hb(cd.eng, te, settings.band);
+  const qs = [8, 9, 10].map((k, j) => { const a = cd.engT.filter(x => x.eng[j]); return { k, n: a.length, met: a.filter(x => x.eng[j] >= 3).length }; });
+  const rows = cd.engT.map(x => ({ ...x, m: x.eng.filter(v => v >= 3).length })).filter(x => only === 1 || x.m < 2).sort((a, b) => a.m - b.m || a.t.code.localeCompare(b.t.code));
+  const notMeet = cd.engT.length - cd.engMet;
+  return <div>
+    <h1 className="text-[20px] font-semibold text-ink px-1 mb-1">Student engagement</h1>
+    <p className="text-[12px] text-muted px-1 mb-3">Teachers meeting the benchmark (Level 3+) on at least 2 of Q9, Q10 and Q11, out of those observed on all three this quarter.</p>
+    <MCard>
+      <div className="flex items-end justify-between gap-3"><div><div className="font-cond text-[36px] font-semibold leading-none num">{f0(cd.eng)}</div><div className="text-[12px] text-muted mt-1">{cd.engMet} of {cd.engT.length} teachers meet the benchmark</div></div>
+        <Pill status={st} label={te == null ? 'Target X%' : `Target ${te}%`} /></div>
+      <div className="mt-3"><MBar value={cd.eng} target={te} color={te == null ? C.teal : STATUS[st].bar} /></div>
+      <div className="grid grid-cols-3 gap-2 mt-4">{qs.map(x => <div key={x.k} className="rounded-xl bg-canvas p-2.5 text-center"><div className="text-[11px] text-muted">{Q_LABEL[x.k]}</div><div className="font-semibold num text-[16px] mt-0.5">{f0(pct(x.met, x.n))}</div><div className="text-[10.5px] text-muted">{x.met}/{x.n}</div></div>)}</div>
+    </MCard>
+    <SecTitle>Teachers</SecTitle>
+    <Chips options={[`Not meeting (${notMeet})`, `All observed (${cd.engT.length})`]} value={only} onChange={setOnly} />
+    <MCard className="mt-2">{rows.length === 0 ? <Empty>Every observed teacher meets the engagement benchmark.</Empty> : rows.map(x => <ListRow key={x.t.id} onClick={() => openTeacher(x.t.id)}>
+      <span className="flex-1 min-w-0"><span className="block text-[13.5px] font-medium">{x.t.code}</span><span className="block text-[11.5px] text-muted">{DB.schools[x.t.school].code} · {fmtShort(x.engDay)}</span></span>
+      <span className="inline-flex gap-1">{x.eng.map((v, i) => <RateChip key={i} v={v} />)}</span>
+      <span className="w-12 text-right"><Pill status={x.m >= 2 ? 'green' : 'amber'} small label={`${x.m}/3`} /></span></ListRow>)}</MCard>
+    <div className="text-[11px] text-muted px-1 mt-2">Chips show Q9 · Q10 · Q11 ratings on the latest observation with all three rated.</div>
+  </div>;
+}
+
+/* ---------------- Teacher history (previous data and next steps) ---------------- */
+function HistoryPage(p) {
+  const { cd, histSel: sel, setHistSel: setSel } = p;
+  const [q, setQ] = useState('');
+  const matches = q.trim() ? cd.tInfo.filter(x => `${x.t.code} ${DB.schools[x.t.school].code}`.toLowerCase().includes(q.trim().toLowerCase())) : cd.tInfo;
+  const t = sel != null ? cd.tInfo.find(x => x.t.id === sel) : null;
+  if (t) {
+    const li = t.lastAll; const focus = li >= 0 ? COMP_Q.map(k => ({ k, v: DB.O.resp[li * NQ + k] })).filter(x => x.v && x.v < 3).sort((a, b) => a.v - b.v).slice(0, 3) : [];
+    return <div>
+      <button type="button" onClick={() => setSel(null)} className="inline-flex items-center gap-1 text-[13px] text-teal mb-2"><Icon name="ChevronLeft" size={16} />All teachers</button>
+      <MCard><div className="text-[16px] font-semibold text-navy">{t.t.code}</div><div className="text-[12px] text-muted">{DB.schools[t.t.school].code} · {t.hist.length} observation{t.hist.length === 1 ? '' : 's'} this year · {t.nQ ? 'observed this quarter' : 'not yet observed this quarter'}</div></MCard>
+      {li >= 0 && <MCard className="mt-2" title="Next steps from last time" info="Areas rated below benchmark on the last observation. In the live app this will also show the next steps you recorded in the form.">
+        <div className="text-[12px] text-muted mb-2">Last observed {fmtDay(t.lastDay)}</div>
+        {focus.length === 0 ? <div className="text-[13px] text-ink">All Q1–Q8 at benchmark last time. Build on strengths.</div> : focus.map(x => <div key={x.k} className="flex items-center gap-2 py-1.5 text-[13px]"><Icon name="Target" size={15} className="text-[#8A5600]" /><span className="flex-1">Work on <b>{Q_LABEL[x.k]}</b></span><Pill status={x.v === 1 ? 'red' : 'amber'} small label={LEVEL[x.v]} /></div>)}
+        <div className="text-[11px] text-muted mt-2">Next-step notes from the form: shown here once the form captures them.</div>
+      </MCard>}
+      <SecTitle>All observations</SecTitle>
+      <div className="flex flex-col gap-2">{t.hist.length === 0 ? <MCard><Empty>No observations recorded yet.</Empty></MCard> : [...t.hist].reverse().map(i => <MCard key={i}>
+        <div className="flex items-center justify-between mb-2"><span className="text-[13.5px] font-semibold">{fmtDay(DB.O.day[i])}</span><span className="text-[11px] text-muted">{Q_LABEL.filter((_, k) => DB.O.resp[i * NQ + k] >= 3).length} of 11 at benchmark</span></div>
+        <div className="grid grid-cols-6 gap-1.5">{Q_LABEL.map((l, k) => { const v = DB.O.resp[i * NQ + k]; return <div key={l} className="rounded-lg text-center py-1" style={{ background: v === 0 ? '#F1F3F5' : v >= 3 ? '#E6F2E8' : '#FDF1DC', color: v === 0 ? '#9AA4B0' : v >= 3 ? '#1F6B30' : '#8A5600' }}>
+          <div className="text-[9.5px] opacity-80">{l}</div><div className="text-[13px] font-semibold num">{v === 0 ? 'NO' : v}</div></div>; })}</div>
+      </MCard>)}</div>
+    </div>;
+  }
+  return <div>
+    <h1 className="text-[20px] font-semibold text-ink px-1 mb-1">My teachers</h1>
+    <p className="text-[12px] text-muted px-1 mb-3">Look up a teacher’s previous observations and the areas to follow up before your visit.</p>
+    <label htmlFor="h-search" className="relative block mb-3"><Icon name="Search" size={16} className="absolute left-3 top-3 text-muted" />
+      <input id="h-search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search teacher ID or school" className="h-11 w-full pl-9 pr-3 rounded-xl border border-line text-[14px] bg-white" /></label>
+    <MCard>{matches.length === 0 ? <Empty>No teacher in your allotment matches “{q}”.</Empty> : matches.map(x => <ListRow key={x.t.id} onClick={() => setSel(x.t.id)}>
+      <span className="w-8 h-8 rounded-full bg-[#EAF4F5] text-teal grid place-items-center shrink-0"><Icon name="User" size={15} /></span>
+      <span className="flex-1 min-w-0"><span className="block text-[13.5px] font-medium">{x.t.code}</span><span className="block text-[11.5px] text-muted">{DB.schools[x.t.school].code} · {x.lastDay >= 0 ? `last ${fmtShort(x.lastDay)}` : 'never observed'}</span></span>
+      {x.nQ === 0 && <Pill status="amber" small label="Pending" />}<Icon name="ChevronRight" size={16} className="text-muted" /></ListRow>)}</MCard>
+  </div>;
+}
+
+/* ---------------- Settings ---------------- */
+function SettingsModal({ settings, onClose, onSave }) {
+  const [s, setS] = useState(settings);
+  const num = (k, v, max) => setS(x => ({ ...x, [k]: v === '' ? null : Math.max(0, Math.min(max, Number(v))) }));
+  return <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="Settings">
+    <div className="absolute inset-0 bg-[#0B1B33]/40" onClick={onClose} />
+    <div className="relative bg-white rounded-md shadow-2xl w-full max-w-[520px] max-h-[90vh] overflow-y-auto">
+      <div className="px-5 py-3 border-b border-line flex items-center justify-between"><h2 className="font-semibold text-[15px]">Settings (prototype)</h2><button onClick={onClose} aria-label="Close" className="p-1 rounded hover:bg-canvas"><Icon name="X" size={18} /></button></div>
+      <div className="p-5 flex flex-col gap-4">
+        <Note tone="info">From the sheet: 100% of own allotted schools and teachers per quarter, shown as Red / Orange / Green against pace. Student engagement stays at X% until baseline data is in. Kept in this browser only.</Note>
+        {[['s-band', 'Orange band (points behind pace)', 'band', 50, 'Prototype rule: orange within this many points of pace, red beyond.'], ['s-eng', 'Student engagement target (%)', 'engTarget', 100, 'Sheet: x% · set once baseline data is in.']].map(([id, l, k, mx, h]) =>
+          <label key={id} htmlFor={id} className="flex flex-col gap-1"><span className="text-[12.5px] font-medium">{l}</span><input id={id} type="number" min="0" max={mx} value={s[k] == null ? '' : s[k]} placeholder="Not set (X)" onChange={e => num(k, e.target.value, mx)} className="h-8 rounded border border-line px-2 text-[13px]" /><span className="text-[11px] text-muted">{h}</span></label>)}
+        <div><div className="text-[12.5px] font-medium mb-1">Prioritised practices (state to confirm)</div>
+          <div className="flex flex-wrap gap-1.5">{COMP_Q.map(k => { const on = s.priority.includes(k); return <button key={k} aria-pressed={on} onClick={() => setS(x => ({ ...x, priority: on ? x.priority.filter(y => y !== k) : [...x.priority, k].sort((a, b) => a - b) }))} className={`px-2.5 py-1 rounded border text-[12px] ${on ? 'bg-navy text-white border-navy' : 'border-line hover:bg-canvas'}`}>{Q_LABEL[k]}</button>; })}</div></div>
+      </div>
+      <div className="px-5 py-3 border-t border-line flex justify-between gap-2">
+        <button onClick={() => setS(DEFAULT_SETTINGS)} className="text-[12.5px] text-muted hover:text-ink">Reset to defaults</button>
+        <div className="flex gap-2"><button onClick={onClose} className="px-3 py-1.5 rounded border border-line text-[12.5px]">Cancel</button>
+          <button onClick={() => onSave({ ...s, band: s.band ?? 10, priority: s.priority.length ? s.priority : DEFAULT_SETTINGS.priority })} className="px-3 py-1.5 rounded bg-navy text-white text-[12.5px] font-medium">Apply</button></div>
+      </div>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body></html>

@@ -1,0 +1,1246 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPARC SEF Internal Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: { navy:'#12305A', navy2:'#1C4478', teal:'#0E7C86', ink:'#1B2733', muted:'#5B6B7B', line:'#E2E7ED', canvas:'#F3F5F8' },
+      fontFamily: {
+        sans: ['"IBM Plex Sans"','"Segoe UI"','system-ui','-apple-system','Arial','sans-serif'],
+        cond: ['"IBM Plex Sans Condensed"','"IBM Plex Sans"','"Segoe UI"','Arial Narrow','sans-serif']
+      }
+    } }
+  };
+</script>
+<style>
+  /* Layout: navy header band + white filter bar; Power BI-style report pages as tabs; cards on a cool grey canvas. Single light theme by design. */
+  :root {
+    --navy:#12305A; --teal:#0E7C86; --ink:#1B2733; --muted:#5B6B7B; --line:#E2E7ED; --canvas:#F3F5F8; --surface:#FFFFFF;
+    --ok:#2E8540; --warn:#C77C02; --bad:#C8372D; --na:#9AA4B0;
+    color-scheme: light;
+  }
+  html, body { background: var(--canvas); color: var(--ink); }
+  body { font-family: "IBM Plex Sans","Segoe UI",system-ui,sans-serif; font-variant-numeric: tabular-nums; }
+  body::before { content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:60; background:var(--navy); }
+  .gutter { padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); }
+  .num { font-variant-numeric: tabular-nums; }
+  h1,h2,h3 { text-wrap: balance; }
+  .recharts-wrapper text { font-family: "IBM Plex Sans","Segoe UI",sans-serif; }
+  .recharts-surface:focus, .recharts-wrapper:focus, .recharts-sector:focus, path:focus { outline: none; }
+  button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .tbl th { position: sticky; top: 0; z-index: 1; }
+  .scroll-x { overflow-x: auto; }
+  .boot { display:flex; align-items:center; justify-content:center; min-height:60vh; color:var(--muted); font-size:14px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+</head><body>
+<div id="root"><div class="boot">Loading SPARC SEF Internal Dashboard…</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
+<script>window.react = window.React; /* lucide-react UMD reads the lowercase global */</script>
+<script src="https://cdn.jsdelivr.net/npm/lucide-react@0.454.0/dist/umd/lucide-react.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useEffect, useCallback } = React;
+const { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, LineChart, Line, Cell, LabelList, Legend } = Recharts;
+const LI = window.LucideReact || {};
+const Icon = ({ name, size = 16, className = '', ...p }) => { const C = LI[name]; return C ? <C size={size} className={className} strokeWidth={2} {...p} /> : null; };
+
+/* =========================================================================
+   1. CALENDAR  (day index 0 = 1 Apr 2026, start of FY 2026-27)
+   ========================================================================= */
+const BASE = Date.UTC(2026, 3, 1);
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const toDay = s => { const [y, m, d] = s.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - BASE) / 864e5); };
+const toISO = day => new Date(BASE + day * 864e5).toISOString().slice(0, 10);
+const fmtDay = day => { const d = new Date(BASE + day * 864e5); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+const fmtShort = day => { const d = new Date(BASE + day * 864e5); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}`; };
+const dow = day => (3 + day) % 7; // 1 Apr 2026 is a Wednesday; 0 = Sunday
+const ASOF = toDay('2026-11-10');   // demo data cut-off
+
+const QUARTERS = [
+  { key: 'Q1', label: 'Q1 FY26-27 · Apr–Jun 2026', short: 'Q1', from: 0, end: toDay('2026-06-30') },
+  { key: 'Q2', label: 'Q2 FY26-27 · Jul–Sep 2026', short: 'Q2', from: toDay('2026-07-01'), end: toDay('2026-09-30') },
+  { key: 'Q3', label: 'Q3 FY26-27 · Oct–Dec 2026 (to date)', short: 'Q3 QTD', from: toDay('2026-10-01'), end: toDay('2026-12-31') },
+].map(q => ({ ...q, to: Math.min(q.end, ASOF) }));
+const MONTHS = [];
+for (let m = 4; m <= 11; m++) {
+  const mm = String(m).padStart(2, '0');
+  const from = toDay(`2026-${mm}-01`);
+  const end = toDay(m === 12 ? '2027-01-01' : `2026-${String(m + 1).padStart(2, '0')}-01`) - 1;
+  const to = Math.min(end, ASOF);
+  MONTHS.push({ key: `M${m}`, label: `${MON[m - 1]} 2026${to < end ? ' (to date)' : ''}`, short: MON[m - 1], from, end, to });
+}
+const qOf = day => QUARTERS.find(q => day >= q.from && day <= q.end) || QUARTERS[0];
+
+/* =========================================================================
+   2. DEMO DATA GENERATOR — synthetic records, deterministic seed.
+      Nothing here is Punjab programme data. District names and the state
+      target of 150 (Amritsar 30) follow the KPI sheet; everything else is
+      generated for the prototype.
+   ========================================================================= */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const NQ = 11;
+const Q_LABEL = Array.from({ length: NQ }, (_, i) => `Q${i + 1}`);
+const COMP_Q = [0, 1, 2, 3, 4, 5, 6, 7];
+const ENG_Q = [8, 9, 10];
+
+const DISTRICT_SEED = [
+  ['Amritsar', 30], ['Barnala', 3], ['Bathinda', 6], ['Faridkot', 3], ['Fatehgarh Sahib', 3], ['Fazilka', 4],
+  ['Ferozepur', 5], ['Gurdaspur', 9], ['Hoshiarpur', 8], ['Jalandhar', 10], ['Kapurthala', 4], ['Ludhiana', 14],
+  ['Malerkotla', 3], ['Mansa', 4], ['Moga', 4], ['Pathankot', 3], ['Patiala', 10], ['Rupnagar', 3],
+  ['SAS Nagar', 5], ['Sangrur', 6], ['SBS Nagar', 3], ['Sri Muktsar Sahib', 4], ['Tarn Taran', 6],
+];
+// Demo storylines so every view has something to show
+const OVERRIDES = {
+  'Tarn Taran': { fill: 0.5 }, 'Amritsar': { fill: 0.8 }, 'Fazilka': { no: 0.22 }, 'Mansa': { fb: 0.58 },
+  'Ferozepur': { onTime: 0.42 }, 'Barnala': { inact: 0.75 }, 'Ludhiana': { conc: 0.72 }, 'Gurdaspur': { rate: 0.5 },
+  'Moga': { qual: -0.55 }, 'Patiala': { inact: 0.3 },
+};
+
+function generate() {
+  const R = mulberry32(20261110);
+  const R2 = mulberry32(777); // separate stream for SEF co-observations so the main demo data matches the District view
+  const rnd = (a, b) => a + R() * (b - a);
+  const rint = (a, b) => Math.floor(rnd(a, b + 1));
+  const gauss = () => { let u = 0, v = 0; while (!u) u = R(); while (!v) v = R(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const sig = x => 1 / (1 + Math.exp(-x));
+  const QD = [0.5, 0.2, -0.1, 0.3, -0.55, 0.05, -0.3, 0.1, -0.2, -0.6, -0.4];
+
+  const districts = [], blocks = [], coaches = [], schools = [], teachers = [], obs = [], pending = [], unsynced = [];
+  DISTRICT_SEED.forEach(([name, target], di) => {
+    const p = { fill: rnd(0.84, 1), fb: rnd(0.8, 0.95), onTime: rnd(0.74, 0.95), no: rnd(0.03, 0.075), inact: rnd(0, 0.12),
+      conc: rnd(0.08, 0.28), qual: gauss() * 0.25, rate: rnd(0.92, 1.12), ...(OVERRIDES[name] || {}) };
+    const nb = Math.max(2, Math.min(8, Math.ceil(target / 4)));
+    const abbr = name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
+    const d = { id: di, name, target, abbr, blocks: [], coaches: [] };
+    districts.push(d);
+    for (let b = 0; b < nb; b++) {
+      const id = blocks.length;
+      blocks.push({ id, name: `${name} · Block ${b + 1}`, short: `Block ${b + 1}`, district: di, coaches: [], target: Math.floor(target / nb) + (b < target % nb ? 1 : 0) });
+      d.blocks.push(id);
+    }
+    const deployed = Math.max(1, Math.round(target * p.fill));
+    for (let k = 0; k < deployed; k++) {
+      const bid = d.blocks[k % nb];
+      const c = { id: coaches.length, district: di, block: bid, join: R() < 0.78 ? rint(0, 6) : rint(20, 185), exit: 9999 };
+      if (R() < 0.04) { const e = rint(c.join + 45, ASOF + 40); if (e <= ASOF) c.exit = e; }
+      c.code = `Coach ${abbr}-${String(k + 1).padStart(2, '0')}`; coaches.push(c); d.coaches.push(c.id); blocks[bid].coaches.push(c.id);
+      const cNo = p.no * (R() < 0.1 ? 3.6 : rnd(0.6, 1.3)); const cPrompt = R() < 0.22; const cUnsync = R() < 0.15 ? 0.22 : 0.004; const cLen = R2() < 0.15;
+      const inactiveFrom = R() < p.inact ? ASOF - rint(15, 35) : 9999;
+      let lvS = -1, lvE = -1; if (R() < 0.3) { lvS = rint(c.join, ASOF); lvE = lvS + rint(4, 22); }
+      const nS = rint(6, 9), sch = [], sids = [], seen = {};
+      for (let s = 0; s < nS; s++) {
+        const sid = schools.length; sids.push(sid); schools.push({ id: sid, coach: c.id, block: bid, district: di, code: `${abbr} School ${String(sid).padStart(4, '0')}`, nT: 0 });
+        const ts = []; const nT = rint(3, 5);
+        for (let t = 0; t < nT; t++) { const tid = teachers.length; teachers.push({ id: tid, school: sid, coach: c.id, block: bid, district: di, code: `${abbr}-T${String(tid).padStart(5, '0')}`, ab: gauss() * 0.85 + p.qual }); ts.push(tid); schools[sid].nT++; }
+        sch.push(ts);
+      }
+      for (let day = c.join; day <= ASOF && day < c.exit; day++) {
+        if (dow(day) === 0) continue;
+        if (day >= inactiveFrom) break;
+        if (day >= lvS && day < lvE) continue;
+        if (R() > 0.5 * p.rate) continue;
+        const si = R() < p.conc ? (R() < 0.5 ? 0 : 1) : rint(0, nS - 1);
+        const ts = sch[si]; const n = R() < 0.4 ? 2 : 1;
+        for (let k2 = 0; k2 < n; k2++) {
+          const t = R() < p.conc ? ts[0] : R() < 0.55 ? ts.reduce((a, b) => ((seen[b] || 0) < (seen[a] || 0) ? b : a)) : ts[rint(0, ts.length - 1)];
+          seen[t] = (seen[t] || 0) + 1;
+          const sub = day + (cPrompt ? (R() < 0.7 ? 0 : 1) : R() < p.onTime ? (R() < 0.55 ? 0 : rint(1, 2)) : rint(3, 10));
+          if (sub > ASOF) { pending.push({ c: c.id, s: sids[si], t, day }); continue; } // geotagged visit, form not yet submitted
+          if (day >= ASOF - 40 && day <= ASOF - 8 && R() < cUnsync) { unsynced.push({ c: c.id, s: sids[si], t, day }); continue; } // recorded on device, not synced
+          const resp = new Array(NQ); const ab = teachers[t].ab;
+          for (let q = 0; q < NQ; q++) {
+            if (R() < cNo * (q >= 8 ? 1.4 : 1)) { resp[q] = 0; continue; } // 0 = Not Observed
+            const pr = sig(-0.9 + ab + QD[q] + 0.0055 * day);
+            resp[q] = R() < pr ? (R() < 0.4 ? 4 : 3) : (R() < 0.35 ? 1 : 2); // 1–4 rubric, benchmark = 3+
+          }
+          const o = { day, sub, t, c: c.id, fb: R() < p.fb ? 1 : 0, resp };
+          if (R2() < 0.07) o.sef = resp.map((v, q) => { // SEF team co-observation of the same lesson
+            if (v === 0) return 0;
+            const pDis = 0.2 + (cLen ? 0.3 : 0) + (q === 4 || q === 9 ? 0.15 : 0);
+            if (R2() >= pDis) return v;
+            let s = cLen ? -1 : (R2() < 0.5 ? -1 : 1); if (v + s < 1 || v + s > 4) s = -s; return v + s; });
+          obs.push(o);
+        }
+      }
+    }
+  });
+  obs.sort((a, b) => a.day - b.day);
+  const N = obs.length;
+  const O = { n: N, day: new Int16Array(N), sub: new Int16Array(N), t: new Int32Array(N), c: new Int16Array(N), fb: new Uint8Array(N), valid: new Uint8Array(N), resp: new Uint8Array(N * NQ) };
+  obs.forEach((o, i) => {
+    O.day[i] = o.day; O.sub[i] = o.sub; O.t[i] = o.t; O.c[i] = o.c; O.fb[i] = o.fb;
+    let v = 0; for (let q = 0; q < NQ; q++) { O.resp[i * NQ + q] = o.resp[q]; if (o.resp[q]) v = 1; }
+    O.valid[i] = v;
+  });
+  const co = []; obs.forEach((o, i) => { if (o.sef) co.push({ i, c: o.c, t: o.t, day: o.day, sef: o.sef }); });
+  const firstIdx = new Int32Array(ASOF + 2); let j = 0;
+  for (let d = 0; d <= ASOF + 1; d++) { while (j < N && O.day[j] < d) j++; firstIdx[d] = j; }
+  return { districts, blocks, coaches, schools, teachers, O, firstIdx, pending, unsynced, co };
+}
+const DB = generate();
+
+/* =========================================================================
+   3. KPI ENGINE — coach level. Raw numerators/denominators per coach,
+      summed to block and district; every rate is Σnum ÷ Σden.
+   ========================================================================= */
+const NT = DB.teachers.length;
+const TC = Int32Array.from(DB.teachers.map(t => t.coach));
+const TS = Int32Array.from(DB.teachers.map(t => t.school));
+const prevQ = new Uint8Array(NT * NQ), lastQ = new Uint8Array(NT * NQ), lastQDay = new Int16Array(NT * NQ), lastObs = new Int32Array(NT), engLast = new Uint8Array(NT), engDay = new Int16Array(NT);
+
+function blankRaw() {
+  return { target: 0, lag: [0, 0, 0, 0, 0, 0], chgN: Array(NQ).fill(0), chgSum: Array(NQ).fill(0), chgUp: Array(NQ).fill(0), chgDown: Array(NQ).fill(0), deployed: 0, coaches: 0, schoolsAllotted: 0, schoolsVisited: 0, teachersAllotted: 0, teachersObserved: 0,
+    dist: [0, 0, 0, 0, 0, 0], distAllotted: 0, validSum: 0, compMet: Array(NQ).fill(0), compDen: Array(NQ).fill(0),
+    adoptMet: 0, adoptDen: 0, adoptQ: Array(NQ).fill(0), engMet: 0, engDen: 0, noResp: 0, totalResp: 0,
+    obs: 0, onTime: 0, within1: 0, fb: 0, eligible: 0, inactive: 0 };
+}
+function addRaw(a, b) { for (const k in a) { if (Array.isArray(a[k])) a[k].forEach((_, i) => { a[k][i] += b[k][i]; }); else a[k] += b[k]; } return a; }
+function sumRaw(list) { const r = blankRaw(); list.forEach(x => addRaw(r, x)); return r; }
+const isActive = (c, f, t) => c.join <= t && c.exit > f;
+
+function aggregate(win, priority) {
+  const { coaches, schools, teachers, O, firstIdx } = DB;
+  const K = coaches.map(() => blankRaw());
+  const asOf = Math.min(win.to, ASOF);
+  coaches.forEach(c => { const r = K[c.id]; if (c.join <= asOf && c.exit > asOf) r.deployed = 1; if (isActive(c, Math.min(win.from, win.covFrom), win.to)) r.coaches = 1; });
+  // last submission + 14-day inactivity (coaches deployed ≥ 14 days)
+  const wFrom = asOf - 13; const has = new Uint8Array(coaches.length); const lastSub = new Int16Array(coaches.length).fill(-1);
+  for (let i = firstIdx[Math.max(0, asOf - 90)]; i < firstIdx[asOf + 1]; i++) { const s = O.sub[i]; if (s <= asOf) { const c = O.c[i]; if (s > lastSub[c]) lastSub[c] = s; if (s >= wFrom) has[c] = 1; } }
+  coaches.forEach(c => { if (c.join <= asOf - 14 && c.exit > asOf) { K[c.id].eligible = 1; if (!has[c.id]) K[c.id].inactive = 1; } });
+  const sVis = new Uint8Array(schools.length), tCov = new Uint8Array(NT), tCnt = new Uint16Array(NT);
+  lastQ.fill(0); prevQ.fill(0); lastObs.fill(-1); engLast.fill(255);
+  const start = Math.max(0, Math.min(win.from, win.covFrom)), end = Math.min(win.to, ASOF);
+  if (end >= start) {
+    for (let i = firstIdx[start]; i < firstIdx[end + 1]; i++) {
+      const d = O.day[i], t = O.t[i];
+      if (d >= win.covFrom) { sVis[TS[t]] = 1; if (O.valid[i]) tCov[t] = 1; }
+      if (d >= win.from) {
+        const r = K[TC[t]]; r.obs++; r.fb += O.fb[i]; const lag = O.sub[i] - d; if (lag <= 2) r.onTime++; if (lag <= 1) r.within1++; r.lag[lag <= 3 ? lag : lag <= 7 ? 4 : 5]++;
+        const base = i * NQ;
+        for (let q = 0; q < NQ; q++) { const v = O.resp[base + q]; r.totalResp++; if (v === 0) r.noResp++; else { prevQ[t * NQ + q] = lastQ[t * NQ + q]; lastQ[t * NQ + q] = v; lastQDay[t * NQ + q] = d; } }
+        if (O.valid[i]) { tCnt[t]++; lastObs[t] = i; }
+        const a = O.resp[base + 8], b = O.resp[base + 9], c = O.resp[base + 10];
+        if (a && b && c) { engLast[t] = (a >= 3) + (b >= 3) + (c >= 3); engDay[t] = d; }
+      }
+    }
+  }
+  schools.forEach(s => { if (isActive(coaches[s.coach], win.covFrom, win.to)) { const r = K[s.coach]; r.schoolsAllotted++; if (sVis[s.id]) r.schoolsVisited++; } });
+  teachers.forEach(tc => {
+    const t = tc.id, r = K[tc.coach], c = coaches[tc.coach];
+    if (isActive(c, win.covFrom, win.to)) { r.teachersAllotted++; if (tCov[t]) r.teachersObserved++; }
+    if (isActive(c, win.from, win.to)) { r.distAllotted++; r.dist[Math.min(tCnt[t], 5)]++; r.validSum += tCnt[t]; }
+    for (let q = 0; q < NQ; q++) { const v = lastQ[t * NQ + q]; if (v) { r.compDen[q]++; if (v >= 3) r.compMet[q]++; const pv = prevQ[t * NQ + q]; if (pv) { r.chgN[q]++; r.chgSum[q] += v - pv; if (v > pv) r.chgUp[q]++; else if (v < pv) r.chgDown[q]++; } } }
+    const lo = lastObs[t];
+    if (lo >= 0) { r.adoptDen++; let met = false; priority.forEach(q => { if (O.resp[lo * NQ + q] >= 3) { r.adoptQ[q]++; met = true; } }); if (met) r.adoptMet++; }
+    if (engLast[t] !== 255) { r.engDen++; if (engLast[t] >= 2) r.engMet++; }
+  });
+  const B = DB.blocks.map(b => sumRaw(b.coaches.map(c => K[c])));
+  B.forEach((r, b) => { r.target = DB.blocks[b].target; });
+  const D = DB.districts.map(d => sumRaw(d.blocks.map(b => B[b])));
+  const S = sumRaw(D);
+  return { K, B, D, S, lastSub, snap: { lastQ: lastQ.slice(), prevQ: prevQ.slice(), lastQDay: lastQDay.slice(), lastObs: lastObs.slice(), eng: engLast.slice(), engDay: engDay.slice(), tCnt } };
+}
+function scopeRaw(A, f) { if (f.coach !== '') return A.K[f.coach]; if (f.block !== '') return A.B[f.block]; if (f.district !== '') return A.D[f.district]; return A.S; }
+function inScopeCoach(c, f) { return (f.district === '' || c.district === f.district) && (f.block === '' || c.block === f.block) && (f.coach === '' || c.id === f.coach); }
+
+const pct = (a, b) => (b > 0 ? (100 * a) / b : null);
+function derive(r) {
+  const comp = r.compDen.map((d, q) => pct(r.compMet[q], d));
+  let low = null; COMP_Q.forEach(q => { if (comp[q] != null && (low == null || comp[q] < low.v)) low = { q, v: comp[q] }; });
+  const vals = COMP_Q.map(q => comp[q]).filter(v => v != null);
+  return {
+    raw: r, deployed: r.deployed, coaches: r.coaches, target: r.target, fill: pct(r.deployed, r.target), shortfall: r.target - r.deployed, lag: r.lag,
+    chg: r.chgN.map((n, q) => (n ? { n, mean: r.chgSum[q] / n, up: (100 * r.chgUp[q]) / n, down: (100 * r.chgDown[q]) / n } : null)),
+    schoolsAllotted: r.schoolsAllotted, schoolsVisited: r.schoolsVisited, schoolCov: pct(r.schoolsVisited, r.schoolsAllotted),
+    teachersAllotted: r.teachersAllotted, teachersObserved: r.teachersObserved, teacherCov: pct(r.teachersObserved, r.teachersAllotted),
+    caseload: r.distAllotted, dist: r.dist, distAllotted: r.distAllotted, meanObs: r.distAllotted ? r.validSum / r.distAllotted : null,
+    comp, compLow: low, compMax: vals.length ? Math.max(...vals) : null,
+    adopt: pct(r.adoptMet, r.adoptDen), adoptDen: r.adoptDen, adoptMet: r.adoptMet, adoptQ: r.adoptQ.map(v => pct(v, r.adoptDen)),
+    eng: pct(r.engMet, r.engDen), engDen: r.engDen, engMet: r.engMet,
+    no: pct(r.noResp, r.totalResp), noResp: r.noResp, totalResp: r.totalResp,
+    ontime: pct(r.onTime, r.obs), onTimeN: r.onTime, within1: pct(r.within1, r.obs), within1N: r.within1, obs: r.obs,
+    fbRate: pct(r.fb, r.obs), fb: r.fb,
+    inactive: r.eligible ? r.inactive : null, eligible: r.eligible,
+  };
+}
+function weeklyOnTime(endDay) {
+  const { O, firstIdx } = DB;
+  let wk = endDay; while (dow(wk) !== 1 && wk > 0) wk--;
+  const out = [];
+  for (let w = 11; w >= 0; w--) {
+    const s = wk - 7 * w; if (s < 0) continue; const e = Math.min(s + 6, ASOF);
+    const per = DB.coaches.map(() => [0, 0]);
+    for (let i = firstIdx[s]; i < firstIdx[e + 1]; i++) { const p = per[O.c[i]]; p[1]++; if (O.sub[i] - O.day[i] <= 2) p[0]++; }
+    out.push({ label: fmtShort(s), per });
+  }
+  return out;
+}
+/* ---- district operational lists ---- */
+function overdueSchools(asOf, f) {
+  const q = qOf(asOf); const qi = QUARTERS.indexOf(q); const pq = qi > 0 ? QUARTERS[qi - 1] : null;
+  const last = new Int16Array(DB.schools.length).fill(-1);
+  for (let i = 0; i < DB.firstIdx[asOf + 1]; i++) last[TS[DB.O.t[i]]] = DB.O.day[i];
+  return DB.schools.filter(s => { const c = DB.coaches[s.coach]; return inScopeCoach(c, f) && isActive(c, q.from, asOf) && last[s.id] < q.from; })
+    .map(s => { const c = DB.coaches[s.coach]; const l = last[s.id]; return { s, c, last: l, days: l >= 0 ? asOf - l : null,
+      twoQ: !!pq && l < pq.from && c.join <= pq.from }; })
+    .sort((a, b) => (b.days == null ? 1e6 : b.days) - (a.days == null ? 1e6 : a.days) || a.s.code.localeCompare(b.s.code));
+}
+function pendingForms(asOf, f) {
+  const out = []; const { O, firstIdx } = DB;
+  for (let i = firstIdx[Math.max(0, asOf - 12)]; i < firstIdx[asOf + 1]; i++) if (O.sub[i] > asOf) out.push({ c: O.c[i], s: TS[O.t[i]], day: O.day[i] });
+  DB.pending.forEach(p => { if (p.day <= asOf) out.push({ c: p.c, s: p.s, day: p.day }); });
+  return out.filter(p => inScopeCoach(DB.coaches[p.c], f)).map(p => ({ ...p, days: asOf - p.day })).sort((a, b) => b.days - a.days);
+}
+function unsyncedForms(asOf, f) {
+  return DB.unsynced.filter(u => u.day <= asOf - 8 && u.day >= asOf - 40 && inScopeCoach(DB.coaches[u.c], f)).map(u => ({ ...u, days: asOf - u.day })).sort((a, b) => b.days - a.days);
+}
+
+/* =========================================================================
+   5. UI PRIMITIVES — calm by default: formulas behind an info icon, one
+      chart per panel (tabs), colour only where something needs attention.
+   ========================================================================= */
+const C = { navy: '#12305A', teal: '#0E7C86', ink: '#1B2733', muted: '#5B6B7B', grid: '#EDF0F4', line: '#E2E7ED' };
+const quietStyle = st => (st === 'red' || st === 'amber' ? { background: STATUS[st].bg, color: STATUS[st].fg } : { color: C.ink });
+const SHORT_STATUS = { grey: 'Target TBC', nodata: 'No data', progress: 'In progress' };
+function Pill({ status, label, small }) {
+  const s = STATUS[status] || STATUS.grey;
+  return <span className={`inline-flex items-center gap-1.5 rounded-full ${small ? 'px-1.5 py-0 text-[10.5px]' : 'px-2 py-0.5 text-[11px]'} font-medium whitespace-nowrap`} style={{ background: s.bg, color: s.fg }}>
+    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.dot }} />{label || s.label}</span>;
+}
+function StatusDot({ status, label }) {
+  const s = STATUS[status] || STATUS.grey;
+  return <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium whitespace-nowrap" style={{ color: s.fg }}><span className="w-2 h-2 rounded-full" style={{ background: s.dot }} />{label || SHORT_STATUS[status] || s.label}</span>;
+}
+function Delta({ cur, prev, lower, unit = 'pp', label }) {
+  if (cur == null || prev == null) return <span className="text-[11px] text-muted whitespace-nowrap">No earlier data</span>;
+  const d = cur - prev; const flat = Math.abs(d) < 0.05;
+  const good = flat ? null : lower ? d < 0 : d > 0;
+  const color = flat ? C.muted : good ? '#1F6B30' : '#9E2A22';
+  return <span className="text-[11px] inline-flex items-center gap-1 whitespace-nowrap" style={{ color }}>
+    <Icon name={flat ? 'Minus' : d > 0 ? 'ArrowUpRight' : 'ArrowDownRight'} size={12} />
+    {flat ? 'No change' : `${d > 0 ? '+' : ''}${unit === 'pp' ? d.toFixed(1) + ' pp' : Math.round(d)}`}
+    {label && <span className="text-muted">{label}</span>}
+  </span>;
+}
+function InfoTip({ text }) {
+  const [pos, setPos] = useState(null);
+  useEffect(() => { if (!pos) return; const close = () => setPos(null); window.addEventListener('scroll', close, true); window.addEventListener('resize', close); return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); }; }, [pos]);
+  if (!text) return null;
+  return <span className="inline-flex align-middle">
+    <button type="button" aria-label="How this is calculated" aria-expanded={!!pos}
+      onClick={e => { e.stopPropagation(); if (pos) { setPos(null); return; } const r = e.currentTarget.getBoundingClientRect(); const w = Math.min(320, window.innerWidth - 24); setPos({ top: r.bottom + 6, left: Math.max(12, Math.min(r.left - 8, window.innerWidth - w - 12)), w }); }}
+      onBlur={() => setPos(null)} className="w-5 h-5 grid place-items-center rounded-full text-[#8A97A6] hover:text-teal hover:bg-canvas"><Icon name="Info" size={14} /></button>
+    {pos && <span role="tooltip" style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.w }} className="z-50 rounded-md border border-line bg-white shadow-xl p-3 text-[12px] leading-snug text-ink font-normal normal-case tracking-normal text-left">{text}</span>}
+  </span>;
+}
+function Seg({ options, value, onChange }) {
+  return <div className="inline-flex rounded-md bg-[#EEF1F5] p-0.5 max-w-full overflow-x-auto" role="tablist">
+    {options.map((o, i) => <button key={i} type="button" role="tab" aria-selected={value === i} onClick={() => onChange(i)}
+      className={`px-2.5 py-1 text-[12px] rounded whitespace-nowrap ${value === i ? 'bg-white text-navy font-semibold shadow-sm' : 'text-muted hover:text-ink'}`}>{o}</button>)}
+  </div>;
+}
+function Panel({ title, formula, right, children, className = '', views }) {
+  const [vi, setVi] = useState(0);
+  return <section className={`bg-white border border-line rounded-lg min-w-0 ${className}`}>
+    <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 pt-4 pb-3">
+      <div className="flex items-center gap-1 min-w-0"><h3 className="text-[14px] font-semibold text-ink">{title}</h3><InfoTip text={formula} /></div>
+      {(right || views) && <div className="flex items-center gap-2 flex-wrap">{right}{views && <Seg options={views.map(v => v.label)} value={vi} onChange={setVi} />}</div>}
+    </header>
+    <div className="px-5 pb-5">{views ? views[Math.min(vi, views.length - 1)].node : children}</div>
+  </section>;
+}
+function Stats({ items }) {
+  return <div className="flex flex-wrap gap-x-7 gap-y-2 mb-3">{items.filter(Boolean).map(([l, v, color], i) => <div key={i}>
+    <div className="text-[11.5px] text-muted">{l}</div><div className="font-cond text-[22px] leading-tight font-semibold num" style={{ color: color || C.ink }}>{v}</div></div>)}</div>;
+}
+function Note({ tone = 'info', icon, children }) {
+  const t = { info: ['#EEF4FA', '#2F5A87'], warn: ['#FDF5E6', '#7A4C00'], bad: ['#FCEDEB', '#8E261F'], grey: ['#F2F4F6', '#4F5A66'] }[tone];
+  return <div className="flex gap-2 items-start rounded-md px-3 py-2 text-[12px] leading-snug" style={{ background: t[0], color: t[1] }}>
+    <Icon name={icon || (tone === 'warn' || tone === 'bad' ? 'AlertTriangle' : 'Info')} size={14} className="mt-0.5 shrink-0" /><div>{children}</div></div>;
+}
+function PendingLine({ items }) {
+  return <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-dashed border-[#C6CED8] bg-white px-4 py-2.5 text-[12.5px]">
+    <span className="inline-flex items-center gap-1.5 text-muted font-medium"><Icon name="Hourglass" size={14} />Pending, not shown until ready:</span>
+    {items.map(([t, x]) => <span key={t} className="inline-flex items-center gap-0.5 text-ink">{t}<InfoTip text={x} /></span>)}
+  </div>;
+}
+function DemoFooter({ sheet }) {
+  return <footer className="gutter py-4 text-[11.5px] text-muted border-t border-line bg-white">
+    <b className="text-[#8A5600]">Demo data.</b> Every value, ID, school and teacher is generated from synthetic records for design review; nothing here is programme data. Formulas, targets and actions follow the “{sheet}” sheet of the KPI workbook. Question labels Q1–Q11 stand in for the Punjab CLOB 2026-27 form.
+  </footer>;
+}
+function ChartTip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const r = payload[0].payload;
+  return <div className="bg-white border border-line rounded-md shadow-lg px-3 py-2 text-[12px] min-w-[180px]">
+    <div className="font-semibold text-ink mb-1">{r.name}</div>
+    {(r.tip || []).map(([k, v], i) => <div key={i} className="flex justify-between gap-4"><span className="text-muted">{k}</span><span className="font-medium num">{v}</span></div>)}
+    {r.status && <div className="mt-1.5"><Pill status={r.status} small /></div>}
+    {r.clickable && <div className="text-[10.5px] text-teal mt-1">Click to drill down</div>}
+  </div>;
+}
+function HBar({ rows, target, targetLabel, refs = [], max = 100, unit = '%', onSelect, selectedId, labelWidth = 120 }) {
+  const height = Math.max(150, rows.length * 22 + 48);
+  const data = rows.map(r => ({ ...r, v: r.value == null ? 0 : r.value, lbl: r.value == null ? 'No data' : unit === '%' ? `${r.value.toFixed(0)}%` : Number.isInteger(r.value) ? String(r.value) : r.value.toFixed(2), clickable: !!onSelect }));
+  return <div style={{ height }} className="w-full">
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} layout="vertical" margin={{ top: 20, right: 44, left: 4, bottom: 0 }} barCategoryGap={6}>
+        <CartesianGrid horizontal={false} stroke={C.grid} />
+        <XAxis type="number" domain={[0, max]} tick={{ fontSize: 10.5, fill: C.muted }} tickFormatter={v => `${v}${unit === '%' ? '%' : ''}`} axisLine={false} tickLine={false} allowDecimals={false} />
+        <YAxis type="category" dataKey="name" width={labelWidth} tick={{ fontSize: 11, fill: C.ink }} interval={0} axisLine={false} tickLine={false} />
+        <Tooltip cursor={{ fill: 'rgba(18,48,90,0.05)' }} content={<ChartTip />} />
+        <Bar dataKey="v" radius={[0, 3, 3, 0]} isAnimationActive={false} cursor={onSelect ? 'pointer' : 'default'}
+          onClick={(d) => { const p = d && (d.payload || d); if (onSelect && p) onSelect(p.id); }}>
+          {data.map(r => <Cell key={r.id} fill={(STATUS[r.status] || STATUS.grey).bar} fillOpacity={selectedId != null && selectedId !== '' && selectedId !== r.id ? 0.3 : 1} />)}
+          <LabelList dataKey="lbl" position="right" style={{ fontSize: 10.5, fill: C.muted }} />
+        </Bar>
+        {target != null && <ReferenceLine x={target} stroke={C.navy} strokeDasharray="4 3" strokeWidth={1.5} label={{ value: targetLabel || `Target ${target}${unit === '%' ? '%' : ''}`, position: 'top', fontSize: 10.5, fill: C.navy, fontWeight: 600 }} />}
+        {refs.map((r, i) => <ReferenceLine key={i} x={r.x} stroke={r.color} strokeDasharray={r.dash || '2 3'} label={{ value: r.label, position: i % 2 ? 'insideBottomRight' : 'top', fontSize: 10, fill: r.color }} />)}
+      </BarChart>
+    </ResponsiveContainer>
+  </div>;
+}
+function Trend({ data, lines, target, targetLabel, height = 220, max = 100, highlight, xInterval = 0 }) {
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(max * f));
+  return <div style={{ height }} className="w-full">
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data} margin={{ top: 14, right: 18, left: -8, bottom: 0 }}>
+        <CartesianGrid vertical={false} stroke={C.grid} />
+        <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: C.muted }} axisLine={{ stroke: C.line }} tickLine={false} interval={xInterval} minTickGap={6} />
+        <YAxis domain={[0, max]} ticks={ticks} tick={{ fontSize: 10.5, fill: C.muted }} tickFormatter={v => `${v}%`} axisLine={false} tickLine={false} />
+        <Tooltip formatter={(v, n) => [v == null ? '—' : `${Number(v).toFixed(1)}%`, n]} contentStyle={{ fontSize: 12, borderColor: C.line }} labelStyle={{ fontWeight: 600, color: C.ink }} />
+        {lines.length > 1 && <Legend iconSize={9} wrapperStyle={{ fontSize: 11 }} />}
+        {target != null && <ReferenceLine y={target} stroke={C.navy} strokeDasharray="4 3" label={{ value: targetLabel || `Target ${target}%`, position: 'insideTopRight', fontSize: 10.5, fill: C.navy }} />}
+        {highlight && <ReferenceLine x={highlight} stroke="#B9C3CE" strokeWidth={14} strokeOpacity={0.35} />}
+        {lines.map(l => <Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.color} strokeWidth={2.2} dot={{ r: 3, fill: '#fff', strokeWidth: 2 }} activeDot={{ r: 5 }} connectNulls isAnimationActive={false} />)}
+      </LineChart>
+    </ResponsiveContainer>
+  </div>;
+}
+function Progress({ value, target, status }) {
+  const w = value == null ? 0 : Math.min(100, value); const s = STATUS[status] || STATUS.grey;
+  return <div className="relative h-1.5 bg-[#EDF0F4] rounded-full overflow-visible">
+    <div className="h-full rounded-full" style={{ width: `${w}%`, background: s.bar }} />
+    {target != null && <div className="absolute -top-1 w-[2px] h-3.5 bg-navy" style={{ left: `calc(${Math.min(100, target)}% - 1px)` }} title={`Target ${Math.round(target)}%`} />}
+  </div>;
+}
+
+/* =========================================================================
+   6. KPI CARDS — value, status, one line of context, target and change
+   ========================================================================= */
+function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status, delta, foot, onClick, progress }) {
+  const tip = [achievement && achievement !== '—' ? `Achievement: ${achievement}` : null, foot].filter(Boolean).join(' · ');
+  return <button type="button" onClick={onClick} title={tip || undefined}
+    className="text-left bg-white border border-line rounded-lg p-4 hover:border-[#9CC9CC] hover:shadow-sm transition-shadow flex flex-col gap-2.5 min-w-0">
+    <div className="flex items-start justify-between gap-2"><span className="text-[12.5px] font-medium text-muted leading-tight">{title}</span><StatusDot status={status} /></div>
+    <div className="flex items-baseline gap-2 flex-wrap"><span className="font-cond text-[30px] leading-none font-semibold text-ink num">{value}</span>{unitNote && <span className="text-[11.5px] text-muted">{unitNote}</span>}</div>
+    {progress}
+    {sub && <div className="text-[12px] text-muted leading-snug line-clamp-2">{sub}</div>}
+    <div className="mt-auto pt-1.5 border-t border-[#F0F2F5] flex items-center justify-between gap-2 text-[11.5px]">
+      <span className="text-muted truncate">Target <span className="text-ink font-medium">{targetLabel}</span></span><span className="shrink-0">{delta}</span></div>
+  </button>;
+}
+function ach(v, t) { return v == null || t == null ? '—' : `${((100 * v) / t).toFixed(0)}% of target`; }
+
+/* =========================================================================
+   6b. SECTION TABLE — one KPI area per table: KPI group headers with count
+       sub-columns, a total row, and Table / Chart views. No status column.
+   ========================================================================= */
+function SectionTable({ title, desc, periodLabel, rowLabel, rows, total, totalLabel, onOpen, kpis, note, alpha, labelWidth = 120 }) {
+  const [view, setView] = useState(0);
+  const [ki, setKi] = useState(0);
+  const sorted = alpha === false ? rows : [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const main = (k, r, bold) => { const st = k.status ? k.status(r) : 'grey'; const v = k.rate(r); const warn = st === 'red' || st === 'amber';
+    return <span className={`num ${bold ? 'font-semibold' : 'font-medium'}`} style={{ color: warn ? STATUS[st].fg : C.ink }}>{k.fmt ? k.fmt(v, r) : k.count ? nf(v) : v == null ? '—' : `${v.toFixed(k.d || 0)}%`}</span>; };
+  const kc = kpis[Math.min(ki, kpis.length - 1)];
+  const chartRows = (kc.sortChart === false || alpha === 'chart' ? sorted : [...rows].sort((a, b) => (kc.rate(a) ?? -1) - (kc.rate(b) ?? -1)))
+    .map(r => ({ id: r.id, name: r.name, value: kc.rate(r), status: kc.status ? kc.status(r) : 'grey', tip: kc.cols.filter(c => !c.main).map(c => [c.label, c.get(r)]) }));
+  const vals = chartRows.map(r => r.value || 0);
+  const max = kc.max || (kc.count || kc.unit === 'num' ? Math.max(kc.target || 0, ...vals) * 1.15 + 1 : Math.max(110, Math.ceil(Math.max(...vals) / 10) * 10 + 10));
+  const bl = 'border-l border-white';
+  const nCols = kpis.reduce((a, k) => a + k.cols.length, 0);
+  return <section className="bg-white border border-line rounded-xl min-w-0">
+    <div className="px-5 pt-5">
+      <h2 className="text-[18px] font-semibold text-ink leading-tight">{title} · {rowLabel} wise {periodLabel && <span className="font-normal text-muted text-[15px]">({periodLabel})</span>}</h2>
+      {desc && <p className="text-[12.5px] text-muted mt-1 max-w-[120ch]">{desc}</p>}
+      <div className="flex gap-1 mt-3 border-b border-line" role="tablist">
+        {['Table view', 'Chart view'].map((t, i) => <button key={t} type="button" role="tab" aria-selected={view === i} onClick={() => setView(i)}
+          className={`px-5 py-2.5 text-[14px] -mb-px border-b-2 ${view === i ? 'border-[#3B6FD8] text-ink font-medium' : 'border-transparent text-muted hover:text-ink'}`}>{t}</button>)}
+      </div>
+    </div>
+    {view === 0 ? <div className="p-5 pt-4"><div className="scroll-x rounded-md">
+      <table className="w-full text-[13px] border-collapse" style={{ minWidth: Math.max(760, 170 + nCols * 96) }}>
+        <thead>
+          <tr className="bg-[#EEF0F4]">
+            <th rowSpan={2} className="px-4 py-3 text-left text-[13px] font-semibold text-ink align-middle min-w-[140px]">{rowLabel} name</th>
+            {kpis.map(k => <th key={k.k} colSpan={k.cols.length} className={`px-3 pt-3 pb-1 text-[13px] font-semibold text-ink text-center ${bl}`}>
+              <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: k.dot }} />{k.label}<InfoTip text={k.info} /></span>
+              {k.tl && <div className="text-[11px] font-normal text-muted mt-0.5">{k.tl}</div>}</th>)}
+          </tr>
+          <tr className="bg-[#EEF0F4]">{kpis.flatMap(k => k.cols.map((c, i) => <th key={k.k + i} className={`px-3 py-2.5 text-[12px] font-medium text-muted text-center whitespace-nowrap ${i === 0 ? bl : ''}`}>{c.label}</th>))}</tr>
+        </thead>
+        <tbody>
+          {sorted.map(r => <tr key={r.id} onClick={onOpen ? () => onOpen(r.id) : undefined} className={`border-b border-[#ECEEF2] ${onOpen ? 'hover:bg-[#F7F9FC] cursor-pointer' : ''}`}>
+            <td className="px-4 py-3 text-ink">{r.name}{r.sub && <div className="text-[11px] text-muted">{r.sub}</div>}</td>
+            {kpis.flatMap(k => k.cols.map((c, i) => <td key={k.k + i} className={`px-3 py-3 text-center whitespace-nowrap ${c.main ? '' : 'text-[#3D4A57] num'}`}>{c.main ? main(k, r) : c.get(r)}</td>))}
+          </tr>)}
+          {total && <tr className="bg-[#EFEDF8] font-semibold">
+            <td className="px-4 py-3 text-ink">{totalLabel}</td>
+            {kpis.flatMap(k => k.cols.map((c, i) => <td key={k.k + i} className="px-3 py-3 text-center num whitespace-nowrap">{c.main ? main(k, total, true) : c.get(total)}</td>))}
+          </tr>}
+        </tbody>
+      </table></div>
+      {note && <div className="text-[11.5px] text-muted mt-3">{note}</div>}
+    </div>
+    : <div className="p-5 pt-4">
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <Seg options={kpis.map(k => k.short || k.label)} value={ki} onChange={setKi} />
+        {total && <span className="text-[12.5px] text-muted">{totalLabel}: {main(kc, total, true)}{kc.tl ? ` · ${kc.tl}` : ''}</span>}
+      </div>
+      <HBar rows={chartRows} target={kc.target} unit={kc.count || kc.unit === 'num' ? 'count' : '%'} max={max} onSelect={onOpen} labelWidth={labelWidth} refs={kc.refs || []} />
+    </div>}
+  </section>;
+}
+
+/* =========================================================================
+   4. SEF INTERNAL KPIs — "3. SEF Internal" (KF review copy, 8 KPIs)
+   ========================================================================= */
+const DEFAULT_SETTINGS = { compTarget: null, engTarget: null, inactiveThreshold: 5, band: 10, covMethod: 'avg', annualTarget: 3, highFactor: 3, caseloadMax: null, sefTarget: null };
+const SKEY = 'sparc-sef-v2-settings';
+function loadSettings() { try { const s = JSON.parse(localStorage.getItem(SKEY) || 'null'); return s ? { ...DEFAULT_SETTINGS, ...s } : DEFAULT_SETTINGS; } catch (e) { return DEFAULT_SETTINGS; } }
+function saveSettings(s) { try { localStorage.setItem(SKEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
+const STATUS = {
+  green:    { label: 'On target',             fg: '#1F6B30', bg: '#E6F2E8', dot: '#2E8540', bar: '#0E7C86', rank: 1 },
+  amber:    { label: 'Needs attention',       fg: '#8A5600', bg: '#FDF1DC', dot: '#C77C02', bar: '#D98A00', rank: 2 },
+  red:      { label: 'Below target',          fg: '#9E2A22', bg: '#FBE7E5', dot: '#C8372D', bar: '#C8372D', rank: 3 },
+  grey:     { label: 'Target not confirmed',  fg: '#55606C', bg: '#EEF1F4', dot: '#9AA4B0', bar: '#5E7A99', rank: 0 },
+  nodata:   { label: 'No data',               fg: '#6B7682', bg: '#F1F3F5', dot: '#C3CAD2', bar: '#C3CAD2', rank: 0 },
+  progress: { label: 'Quarter in progress',   fg: '#2F5A87', bg: '#E7EFF8', dot: '#4A78A8', bar: '#4A78A8', rank: 0 },
+};
+const hb = (v, t, band) => (v == null ? 'nodata' : t == null ? 'grey' : v >= t - 1e-9 ? 'green' : v >= t - band ? 'amber' : 'red');
+const f1 = v => (v == null ? '—' : `${v.toFixed(1)}%`);
+const f0 = v => (v == null ? '—' : `${Math.round(v)}%`);
+const nf = v => (v == null ? '—' : v.toLocaleString('en-IN'));
+const LEVEL = ['Not observed', 'Level 1', 'Level 2', 'Level 3', 'Level 4'];
+const KPI = {
+  load: { name: 'Teachers allotted per coach', freq: 'Quarterly',
+    formula: 'Count of teachers allotted to each block coach, from the teacher roster of their allotted schools. Shown under each coach’s name in the coach table. No target: a capacity input.',
+    action: 'If allotment materially exceeds what one observation per teacher per quarter allows, escalate to state leadership as an allotment problem before setting any coverage expectation.' },
+  cov: { name: '% teacher coverage against allotment', freq: 'Quarterly, updated in real time',
+    formula: 'Unique allotted teachers with ≥1 valid observation in the period ÷ unique teachers allotted to the coach. District coverage is the average of all its block coaches’ coverage (the sheet’s rule); the pooled figure is shown alongside.',
+    action: 'Flag blocks below target to the district Programme Head / DRC, who takes action with the block coaches.' },
+  dist: { name: 'Observation distribution per allotted teacher', freq: 'Quarterly, updated in real time',
+    formula: 'Allotted teachers receiving 0, 1, 2, 3, 4 or 5+ observations in the period. Target: 3 observations per teacher in the year. District leadership also receives the lists of high-support and low-support teachers.',
+    action: 'District team follows up with block coaches and agrees a plan of action in the district review meeting to ensure equitable support to all teachers.' },
+  comp: { name: '% teachers meeting benchmark in teacher competencies', freq: 'Quarterly',
+    formula: 'Unique teachers meeting the benchmark on their latest valid observation for the competency ÷ unique teachers with valid observations on all relevant questions (Q1–Q8).',
+    action: 'Drill by question to locate lower-performing competencies and re-plan with the district/block team. Below target, drill to teacher-level results and the assigned coach for follow-up.' },
+  eng: { name: '% teachers meeting benchmark in student engagement', freq: 'Quarterly',
+    formula: 'Unique teachers meeting the benchmark on at least 2 of Q9, Q10, Q11 ÷ unique teachers observed on all three.',
+    action: 'Drill by question to locate lower-performing indicators and re-plan with the district/block team; drill to block and teacher-level results with the assigned coach for follow-up.' },
+  idle: { name: 'Deployed coaches with no observation in 14 days', freq: 'Fortnightly',
+    formula: 'By district and block: count and % of deployed coaches with zero submitted observations in the last 14 days. The named coach list is shown once a district is selected.',
+    action: 'District leadership follows up on block coaches below the agreed target. Target zero coaches in every district; up to 5 in the first six months.' },
+  chg: { name: 'Competency rating change between consecutive observations', freq: 'Quarterly',
+    formula: 'Change in rating on a competency between a teacher’s two most recent valid observations in the period, reported as the mean change and the % of teachers whose rating improved. Matched teachers only (teachers with two valid ratings).',
+    action: 'No target: an observation metric that informs programme decisions and individual support to teachers and coaches.' },
+  sef: { name: 'SEF vs coach observation variance, by coach and competency', freq: 'Quarterly',
+    formula: '% agreement between coach-rated and SEF co-observed scores on matched co-observations (same rating = agreement), per coach and per question. Mean absolute difference and direction (coach − SEF) shown alongside.',
+    action: 'Identify questions with high and low variance to target observation support; identify coaches with high and low variance and plan training accordingly. Target decided after the pilot; ideal state 70% alignment.' },
+};
+function inactiveAt(asOf) {
+  const { O, firstIdx, coaches } = DB; const w = asOf - 13; const has = new Uint8Array(coaches.length);
+  for (let i = firstIdx[Math.max(0, w - 10)]; i < firstIdx[Math.min(asOf, ASOF) + 1]; i++) { const s = O.sub[i]; if (s >= w && s <= asOf) has[O.c[i]] = 1; }
+  return coaches.map(c => (c.join <= asOf - 14 && c.exit > asOf ? (has[c.id] ? 1 : 2) : 0));
+}
+const covAvg = (A, ids) => { let s = 0, n = 0; ids.forEach(c => { const r = A.K[c]; if (r.teachersAllotted > 0) { s += r.teachersObserved / r.teachersAllotted; n++; } }); return n ? (100 * s) / n : null; };
+const DIST_COL = ['#C8372D', '#9CC9CC', '#5FAAB0', '#0E7C86', '#1C4478', '#12305A'];
+const DIST_LBL = ['0', '1', '2', '3', '4', '5+'];
+function schoolStatus(asOf, ids) {
+  // per school: visited in the current quarter? last visit ever (≤ asOf)
+  const q = qOf(asOf); const set = new Set(ids); const last = new Int16Array(DB.schools.length).fill(-1);
+  for (let i = 0; i < DB.firstIdx[asOf + 1]; i++) last[TS[DB.O.t[i]]] = DB.O.day[i];
+  return DB.schools.filter(s => set.has(s.coach) && isActive(DB.coaches[s.coach], q.from, asOf)).map(s => ({ s, last: last[s.id], visited: last[s.id] >= q.from }));
+}
+
+function coByCoach(win) {
+  const blank = () => ({ co: 0, n: 0, agree: 0, abs: 0, bias: 0, q: Array.from({ length: NQ }, () => ({ n: 0, agree: 0, abs: 0, bias: 0 })) });
+  const k = DB.coaches.map(blank);
+  DB.co.forEach(x => { if (x.day < win.from || x.day > win.to) return; const r = k[x.c]; r.co++;
+    for (let j = 0; j < NQ; j++) { const a = DB.O.resp[x.i * NQ + j], b = x.sef[j]; if (!a || !b) continue; const ag = a === b ? 1 : 0, d = a - b;
+      r.n++; r.agree += ag; r.abs += Math.abs(d); r.bias += d; const t = r.q[j]; t.n++; t.agree += ag; t.abs += Math.abs(d); t.bias += d; } });
+  return k;
+}
+function sefSum(k, ids) {
+  const o = { co: 0, n: 0, agree: 0, abs: 0, bias: 0, q: Array.from({ length: NQ }, () => ({ n: 0, agree: 0, abs: 0, bias: 0 })) };
+  ids.forEach(c => { const r = k[c]; o.co += r.co; o.n += r.n; o.agree += r.agree; o.abs += r.abs; o.bias += r.bias; r.q.forEach((v, j) => { const t = o.q[j]; t.n += v.n; t.agree += v.agree; t.abs += v.abs; t.bias += v.bias; }); });
+  o.rate = o.n ? (100 * o.agree) / o.n : null; o.mad = o.n ? o.abs / o.n : null; o.b = o.n ? o.bias / o.n : null; return o;
+}
+const chgAll = (raw, qs = COMP_Q) => { let n = 0, s = 0, up = 0, dn = 0; qs.forEach(q => { n += raw.chgN[q]; s += raw.chgSum[q]; up += raw.chgUp[q]; dn += raw.chgDown[q]; }); return n ? { n, mean: s / n, up: (100 * up) / n, down: (100 * dn) / n, same: (100 * (n - up - dn)) / n } : null; };
+const placeOf = b => `${DB.districts[DB.blocks[b].district].name} · ${DB.blocks[b].short}`;
+const sgn = v => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`);
+const SEF_IDEAL = 70;
+
+/* =========================================================================
+   7. APP
+   ========================================================================= */
+const PAGES = [
+  { key: 'overview', label: 'Overview', icon: 'LayoutDashboard' },
+  { key: 'coverage', label: 'Coverage & Caseload', icon: 'Users' },
+  { key: 'distribution', label: 'Observation Distribution', icon: 'BarChart3' },
+  { key: 'competency', label: 'Teacher Competencies', icon: 'Award' },
+  { key: 'change', label: 'Rating Change', icon: 'TrendingUp' },
+  { key: 'engagement', label: 'Student Engagement', icon: 'MessagesSquare' },
+  { key: 'activity', label: 'Coach Activity', icon: 'UserX' },
+  { key: 'sef', label: 'SEF Co-observation', icon: 'ClipboardCheck' },
+];
+const pageFromHash = () => { const h = (location.hash || '').replace('#', ''); return PAGES.some(p => p.key === h) ? h : 'overview'; };
+
+function App() {
+  const [page, setPage] = useState(pageFromHash());
+  const [view, setView] = useState('Q');
+  const [periodKey, setPeriodKey] = useState('Q3');
+  const [custom, setCustom] = useState(null);
+  const [district, setDistrict] = useState('');
+  const [block, setBlock0] = useState('');
+  const [coach, setCoach] = useState('');
+  const [settings, setSettingsState] = useState(loadSettings);
+  const [showSettings, setShowSettings] = useState(false);
+  const [compQ, setCompQ] = useState(null);
+  useEffect(() => { const on = () => setPage(pageFromHash()); window.addEventListener('hashchange', on); return () => window.removeEventListener('hashchange', on); }, []);
+  const go = k => { if (location.hash !== '#' + k) location.hash = k; setPage(k); window.scrollTo({ top: 0 }); };
+  const setSettings = s => { setSettingsState(s); saveSettings(s); };
+  const setBlock = b => { if (b !== '') setDistrict(DB.blocks[b].district); setBlock0(b); };
+  const f = { district, block, coach };
+  const periods = view === 'Q' ? QUARTERS : MONTHS;
+  const { win, prevWin, periodLabel, prevLabel } = useMemo(() => {
+    if (custom) { const len = custom.to - custom.from + 1;
+      return { win: { from: custom.from, to: custom.to, covFrom: custom.from }, prevWin: custom.from - len >= 0 ? { from: custom.from - len, to: custom.from - 1, covFrom: custom.from - len } : null, periodLabel: `${fmtDay(custom.from)} – ${fmtDay(custom.to)}`, prevLabel: `previous ${len} days` }; }
+    const i = Math.max(0, periods.findIndex(p => p.key === periodKey)); const p = periods[i]; const pp = periods[i - 1];
+    const cov = x => (view === 'M' ? qOf(x.from).from : x.from);
+    return { win: { from: p.from, to: p.to, covFrom: cov(p) }, prevWin: pp ? { from: pp.from, to: pp.to, covFrom: cov(pp) } : null, periodLabel: p.label, prevLabel: pp ? pp.short : null };
+  }, [custom, periods, periodKey, view]);
+  const asOf = Math.min(win.to, ASOF);
+  const qq = qOf(win.to);
+  const complete = win.covFrom <= qq.from && win.to >= qq.end;
+  const pace = complete ? 100 : win.covFrom === qq.from ? Math.min(100, (100 * (win.to - qq.from + 1)) / (qq.end - qq.from + 1)) : 100;
+  const fyPace = (settings.annualTarget * (asOf + 1)) / 365;
+
+  const cur = useMemo(() => aggregate(win, []), [win]);
+  const prev = useMemo(() => (prevWin ? aggregate(prevWin, []) : null), [prevWin]);
+  const fy = useMemo(() => aggregate({ from: 0, to: asOf, covFrom: 0 }, []), [asOf]);
+  const qTrend = useMemo(() => QUARTERS.map(q => ({ q, A: aggregate({ from: q.from, to: q.to, covFrom: q.from }, []), co: coByCoach(q) })), []);
+  const mTrend = useMemo(() => MONTHS.map(mo => ({ mo, A: aggregate({ from: mo.from, to: mo.to, covFrom: qOf(mo.from).from }, []) })), []);
+  const fortnights = useMemo(() => { const out = []; for (let k = 7; k >= 0; k--) { const e = asOf - 14 * k; if (e < 20) continue; out.push({ label: fmtShort(e), e, idle: inactiveAt(e) }); } return out; }, [asOf]);
+  const coK = useMemo(() => coByCoach(win), [win]);
+  const coP = useMemo(() => (prevWin ? coByCoach(prevWin) : null), [prevWin]);
+
+  const level = district === '' ? 'district' : block === '' ? 'block' : 'coach';
+  const scopeIds = DB.coaches.filter(c => inScopeCoach(c, f)).map(c => c.id);
+  const activeIds = ids => ids.filter(c => cur.K[c].coaches);
+  const groups = level === 'district' ? DB.districts.map(d => ({ id: d.id, name: d.name, coachIds: d.coaches, raw: A => A.D[d.id] }))
+    : level === 'block' ? DB.districts[district].blocks.map(b => ({ id: b, name: DB.blocks[b].short, coachIds: DB.blocks[b].coaches, raw: A => A.B[b] }))
+    : activeIds(DB.blocks[block].coaches).map(c => ({ id: c, name: DB.coaches[c].code, coachIds: [c], raw: A => A.K[c] }));
+  const idleNow = useMemo(() => inactiveAt(asOf), [asOf]);
+  const idleOf = (ids, arr = idleNow) => { let e = 0, i = 0; ids.forEach(c => { if (arr[c]) { e++; if (arr[c] === 2) i++; } }); return { elig: e, idle: i, pct: e ? (100 * i) / e : null }; };
+  const covOf = (A, ids, raw) => (settings.covMethod === 'avg' ? covAvg(A, ids) : derive(raw).teacherCov);
+  const build = (raw, ids, fyRaw) => { const m = derive(raw); const fm = derive(fyRaw); const id = idleOf(ids);
+    const loads = ids.filter(c => cur.K[c].coaches).map(c => cur.K[c].distAllotted);
+    return { m, cov: covOf(cur, ids, raw), covPooled: m.teacherCov, fyMean: fm.meanObs, idle: id.idle, elig: id.elig, idlePct: id.pct, coaches: loads.length,
+      load: loads.length ? loads.reduce((a, b) => a + b, 0) / loads.length : null, chg: chgAll(raw), sef: sefSum(coK, ids) }; };
+  const S = build(scopeRaw(cur, f), scopeIds, scopeRaw(fy, f));
+  const P = prev ? { cov: covOf(prev, scopeIds, scopeRaw(prev, f)), m: derive(scopeRaw(prev, f)), chg: chgAll(scopeRaw(prev, f)), sef: sefSum(coP, scopeIds) } : null;
+  const rows = groups.map(g => ({ id: g.id, name: g.name, ...build(g.raw(cur), g.coachIds, g.raw(fy)) }));
+  const band = settings.band; const sefT = settings.sefTarget ?? SEF_IDEAL;
+  const idleSt = (n, e) => (!e ? 'nodata' : n === 0 ? 'green' : n <= settings.inactiveThreshold ? 'amber' : 'red');
+  const stOf = (r, coachLevel) => ({ cov: hb(r.cov, pace, band), comp: r.m.compLow ? hb(r.m.compLow.v, settings.compTarget, band) : 'nodata', eng: hb(r.m.eng, settings.engTarget, band),
+    dist: r.fyMean == null ? 'nodata' : hb((100 * r.fyMean) / fyPace, 100, 15), idle: coachLevel ? (r.elig ? (r.idle ? 'red' : 'green') : 'nodata') : idleSt(r.idle, r.elig),
+    chg: r.chg ? 'grey' : 'nodata', sef: r.sef.n >= 10 ? hb(r.sef.rate, sefT, band) : 'nodata' });
+  const st = stOf(S, false);
+  const rowSt = r => stOf(r, level === 'coach');
+  const drill = id => { if (level === 'district') { setDistrict(id); setBlock0(''); setCoach(''); } else if (level === 'block') { setBlock0(id); setCoach(''); } else setCoach(id === coach ? '' : id); };
+  const scopeName = coach !== '' ? DB.coaches[coach].code : block !== '' ? placeOf(block) : district !== '' ? DB.districts[district].name : 'Punjab';
+  const shared = { S, P, st, rows, rowSt, level, drill, f, block, coach, district, settings, setShowSettings, pace, complete, fyPace, win, asOf, periodLabel, prevLabel, cur, fy, qTrend, mTrend, fortnights, scopeIds, idleOf, idleNow, go, compQ, setCompQ, scopeName, covOf, setBlock, setCoach, setDistrict, coK, sefT };
+  const resetAll = () => { setDistrict(''); setBlock0(''); setCoach(''); setView('Q'); setPeriodKey('Q3'); setCustom(null); };
+  const isDefault = district === '' && block === '' && coach === '' && view === 'Q' && periodKey === 'Q3' && !custom;
+  const up = () => { if (coach !== '') setCoach(''); else if (block !== '') setBlock0(''); else setDistrict(''); };
+  return <div className="min-h-full">
+    <Header {...{ view, setView, periodKey, setPeriodKey, periods, custom, setCustom, district, setDistrict, block, setBlock: setBlock0, coach, setCoach, setShowSettings, win, resetAll, isDefault }} />
+    <nav className="gutter bg-white border-b border-line sticky z-30" style={{ top: 'env(safe-area-inset-top,0px)' }}>
+      <div className="flex gap-1 overflow-x-auto -mb-px">
+        {PAGES.map(p => <button key={p.key} onClick={() => go(p.key)} className={`flex items-center gap-1.5 px-3 py-2.5 text-[13px] whitespace-nowrap border-b-2 ${page === p.key ? 'border-teal text-navy font-semibold' : 'border-transparent text-muted hover:text-ink'}`}><Icon name={p.icon} size={15} />{p.label}</button>)}
+      </div>
+    </nav>
+    <div className="gutter py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
+      <span className="inline-flex items-center gap-1 flex-wrap"><Icon name="MapPin" size={13} />
+        <button className="hover:underline text-ink font-medium" onClick={() => { setDistrict(''); setBlock0(''); setCoach(''); }}>Punjab</button>
+        {district !== '' && <><Icon name="ChevronRight" size={12} /><button className="hover:underline text-ink font-medium" onClick={() => { setBlock0(''); setCoach(''); }}>{DB.districts[district].name}</button></>}
+        {block !== '' && <><Icon name="ChevronRight" size={12} /><button className="hover:underline text-ink font-medium" onClick={() => setCoach('')}>{DB.blocks[block].short}</button></>}
+        {coach !== '' && <><Icon name="ChevronRight" size={12} /><span className="text-ink font-medium">{DB.coaches[coach].code}</span></>}
+      </span>
+      <span>·</span><span>{periodLabel}</span>
+      {!complete && <span className="inline-flex items-center gap-1 text-[#2F5A87]"><Icon name="Gauge" size={13} />Quarter {f0(pace)} elapsed: coverage is read against this pace</span>}
+      {district !== '' && <button onClick={up} className="inline-flex items-center gap-1 text-teal hover:underline"><Icon name="CornerLeftUp" size={12} />Up one level</button>}
+    </div>
+    <main className="gutter pb-10 pt-1">
+      {page === 'overview' && <OverviewPage {...shared} />}
+      {page === 'coverage' && <CoveragePage {...shared} />}
+      {page === 'distribution' && <DistributionPage {...shared} />}
+      {page === 'competency' && <CompetencyPage {...shared} />}
+      {page === 'change' && <ChangePage {...shared} />}
+      {page === 'engagement' && <EngagementPage {...shared} />}
+      {page === 'activity' && <ActivityPage {...shared} />}
+      {page === 'sef' && <SefPage {...shared} />}
+    </main>
+    <DemoFooter sheet="3. SEF Internal (KF review copy)" />
+    {showSettings && <SettingsModal settings={settings} onClose={() => setShowSettings(false)} onSave={s => { setSettings(s); setShowSettings(false); }} />}
+  </div>;
+}
+
+/* ---------------- Header ---------------- */
+function Sel({ id, label, value, onChange, children, disabled }) {
+  return <label htmlFor={id} className="flex flex-col gap-0.5 min-w-0">
+    <span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">{label}</span>
+    <select id={id} value={value} disabled={disabled} onChange={e => onChange(e.target.value)} className="h-8 rounded border border-line bg-white px-2 text-[12.5px] text-ink disabled:bg-[#F3F5F8] disabled:text-muted min-w-[120px]">{children}</select>
+  </label>;
+}
+function Header({ view, setView, periodKey, setPeriodKey, periods, custom, setCustom, district, setDistrict, block, setBlock, coach, setCoach, setShowSettings, win, resetAll, isDefault }) {
+  const from = custom ? custom.from : win.from, to = custom ? custom.to : win.to;
+  const setRange = (a0, b0) => { if (isNaN(a0) || isNaN(b0)) return; const a = Math.max(0, Math.min(a0, ASOF)), b = Math.max(0, Math.min(b0, ASOF)); setCustom({ from: Math.min(a, b), to: Math.max(a, b) }); };
+  const coachOpts = district === '' ? [] : DB.districts[district].coaches.filter(c => block === '' || DB.coaches[c].block === block);
+  return <header>
+    <div className="gutter bg-navy text-white py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-9 h-9 rounded bg-white/10 grid place-items-center shrink-0"><Icon name="Activity" size={20} className="text-[#7FD3D8]" /></div>
+        <div className="min-w-0"><h1 className="font-cond text-[19px] sm:text-[21px] font-semibold leading-tight">SPARC – SEF Internal Programme Dashboard</h1>
+          <div className="text-[12px] text-white/70">SEF Leadership & Programme Head View · Punjab · FY 2026-27</div></div>
+      </div>
+      <div className="ml-auto flex items-center gap-3 text-[12px]">
+        <span className="hidden sm:inline-flex items-center gap-1.5 rounded bg-[#F2B544] text-[#3D2A00] font-semibold px-2 py-1 text-[11px] tracking-wide"><Icon name="FlaskConical" size={13} />DEMO DATA</span>
+        <span className="text-white/75 inline-flex items-center gap-1.5"><Icon name="RefreshCw" size={13} />Last updated <b className="text-white font-medium">{fmtDay(ASOF)}</b></span>
+        <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-1.5 rounded border border-white/25 px-2.5 py-1.5 hover:bg-white/10"><Icon name="SlidersHorizontal" size={14} />Targets</button>
+      </div>
+    </div>
+    <div className="gutter bg-white border-b border-line py-2.5 flex flex-wrap items-end gap-3">
+      <Sel id="f-state" label="State" value="PB" onChange={() => {}}><option value="PB">Punjab</option></Sel>
+      <Sel id="f-district" label="District" value={district} onChange={v => { setDistrict(v === '' ? '' : Number(v)); setBlock(''); setCoach(''); }}>
+        <option value="">All districts</option>{DB.districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
+      <Sel id="f-block" label="Block" value={block} disabled={district === ''} onChange={v => { setBlock(v === '' ? '' : Number(v)); setCoach(''); }}>
+        <option value="">All blocks</option>{district !== '' && DB.districts[district].blocks.map(b => <option key={b} value={b}>{DB.blocks[b].short}</option>)}</Sel>
+      <Sel id="f-coach" label="Coach ID" value={coach} disabled={district === ''} onChange={v => { const c = v === '' ? '' : Number(v); setCoach(c); if (c !== '') setBlock(DB.coaches[c].block); }}>
+        <option value="">{district === '' ? 'Select a district' : 'All coaches'}</option>{coachOpts.map(c => <option key={c} value={c}>{DB.coaches[c].code}</option>)}</Sel>
+      <div className="flex flex-col gap-0.5"><span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">View</span>
+        <div className="inline-flex h-8 rounded border border-line overflow-hidden" role="group" aria-label="Monthly or quarterly view">
+          {[['M', 'Monthly'], ['Q', 'Quarterly']].map(([k, l]) => <button key={k} onClick={() => { setView(k); setCustom(null); setPeriodKey(k === 'Q' ? 'Q3' : 'M11'); }} className={`px-3 text-[12.5px] ${view === k && !custom ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-canvas'}`}>{l}</button>)}
+        </div></div>
+      <Sel id="f-period" label="Reporting period" value={custom ? 'custom' : periodKey} onChange={v => { if (v === 'custom') setCustom({ from: win.from, to: win.to }); else { setCustom(null); setPeriodKey(v); } }}>
+        {periods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}<option value="custom">Custom range…</option></Sel>
+      {custom && <><label htmlFor="f-from" className="flex flex-col gap-0.5"><span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">From</span>
+        <input id="f-from" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(from)} onChange={e => e.target.value && setRange(toDay(e.target.value), to)} className="h-8 rounded border border-line px-2 text-[12.5px]" /></label>
+        <label htmlFor="f-to" className="flex flex-col gap-0.5"><span className="text-[10.5px] uppercase tracking-[0.06em] text-muted font-semibold">To</span>
+        <input id="f-to" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(to)} onChange={e => e.target.value && setRange(from, toDay(e.target.value))} className="h-8 rounded border border-line px-2 text-[12.5px]" /></label></>}
+      <button type="button" onClick={resetAll} disabled={isDefault} className="h-8 inline-flex items-center gap-1.5 rounded border border-line bg-white px-3 text-[12.5px] text-ink hover:bg-canvas hover:border-teal disabled:opacity-40 disabled:cursor-not-allowed"><Icon name="RotateCcw" size={14} />Reset filters</button>
+    </div>
+  </header>;
+}
+
+/* ---------------- shared charts ---------------- */
+function Spark({ data, color = C.teal, target }) {
+  return <div style={{ height: 38 }} className="w-full"><ResponsiveContainer width="100%" height="100%">
+    <LineChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 2 }}>
+      <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
+      {target != null && <ReferenceLine y={target} stroke="#B9C3CE" strokeDasharray="3 3" />}
+      <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
+    </LineChart></ResponsiveContainer></div>;
+}
+function DistStack({ rows, onSelect, labelWidth = 120, height }) {
+  const data = rows.map(r => { const tot = r.dist.reduce((a, b) => a + b, 0) || 1; const o = { id: r.id, name: r.name, tot }; r.dist.forEach((n, i) => { o['d' + i] = (100 * n) / tot; o['n' + i] = n; }); return o; });
+  const h = height || Math.max(160, data.length * 24 + 50);
+  return <div style={{ height: h }} className="w-full"><ResponsiveContainer width="100%" height="100%">
+    <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }} barCategoryGap={5}>
+      <CartesianGrid horizontal={false} stroke={C.grid} />
+      <XAxis type="number" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} allowDataOverflow tickFormatter={v => `${Math.round(v)}%`} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
+      <YAxis type="category" dataKey="name" width={labelWidth} tick={{ fontSize: 11, fill: C.ink }} interval={0} axisLine={false} tickLine={false} />
+      <Tooltip cursor={{ fill: 'rgba(18,48,90,0.05)' }} content={({ active, payload }) => { if (!active || !payload || !payload.length) return null; const r = payload[0].payload;
+        return <div className="bg-white border border-line rounded-md shadow-lg px-3 py-2 text-[12px] min-w-[190px]"><div className="font-semibold mb-1">{r.name} · {nf(r.tot)} teachers</div>
+          {DIST_LBL.map((l, i) => <div key={l} className="flex justify-between gap-4"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: DIST_COL[i] }} />{l} observation{l === '1' ? '' : 's'}</span><span className="num">{nf(r['n' + i])} · {r['d' + i].toFixed(0)}%</span></div>)}</div>; }} />
+      {DIST_LBL.map((l, i) => <Bar key={l} dataKey={'d' + i} stackId="a" fill={DIST_COL[i]} isAnimationActive={false} cursor={onSelect ? 'pointer' : 'default'} onClick={d => onSelect && d && onSelect((d.payload || d).id)} />)}
+    </BarChart></ResponsiveContainer></div>;
+}
+function VCol({ rows, target, targetLabel, unit = '%', max, onSelect, height = 340, decimals = 0 }) {
+  const data = rows.map(r => ({ ...r, v: r.value == null ? 0 : r.value, lbl: r.value == null ? '' : unit === '%' ? `${r.value.toFixed(0)}%` : r.value.toFixed(decimals) }));
+  const top = max || (unit === '%' ? 100 : Math.max(1, Math.ceil(Math.max(target || 0, ...data.map(d => d.v)) * 1.15)));
+  return <div style={{ height }} className="w-full"><ResponsiveContainer width="100%" height="100%">
+    <BarChart data={data} margin={{ top: 22, right: 64, left: -10, bottom: 4 }} barCategoryGap="18%">
+      <CartesianGrid vertical={false} stroke={C.grid} />
+      <XAxis dataKey="name" interval={0} angle={-40} textAnchor="end" height={78} tick={{ fontSize: 10.5, fill: C.ink }} axisLine={{ stroke: C.line }} tickLine={false} />
+      <YAxis domain={[0, top]} tickFormatter={v => (unit === '%' ? `${v}%` : v)} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} allowDecimals={unit !== '%'} />
+      <Tooltip cursor={{ fill: 'rgba(18,48,90,0.05)' }} content={<ChartTip />} />
+      <Bar dataKey="v" radius={[3, 3, 0, 0]} isAnimationActive={false} cursor={onSelect ? 'pointer' : 'default'} onClick={d => { const p = d && (d.payload || d); if (onSelect && p) onSelect(p.id); }}>
+        {data.map(r => <Cell key={r.id} fill={(STATUS[r.status] || STATUS.grey).bar} />)}
+        <LabelList dataKey="lbl" position="top" style={{ fontSize: rows.length > 14 ? 8.5 : 10, fill: C.muted }} />
+      </Bar>
+      {target != null && <ReferenceLine y={target} stroke={C.navy} strokeDasharray="5 4" strokeWidth={1.5} label={{ value: targetLabel, position: 'right', fontSize: 10.5, fill: C.navy, fontWeight: 600, width: 60 }} />}
+    </BarChart></ResponsiveContainer></div>;
+}
+const DistLegend = () => <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-muted">{DIST_LBL.map((l, i) => <span key={l} className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: DIST_COL[i] }} />{l} obs</span>)}</div>;
+
+const lvlLabel = l => (l === 'district' ? 'District' : l === 'block' ? 'Block' : 'Coach');
+const LW = l => (l === 'district' ? 120 : l === 'block' ? 70 : 110);
+function Tile({ label, value, sub, status }) {
+  return <div className="bg-white border border-line rounded-lg px-4 py-3 min-w-0"><div className="flex items-center justify-between gap-2 text-[12px] text-muted">{label}{status && <StatusDot status={status} />}</div>
+    <div className="font-cond text-[24px] font-semibold text-ink num leading-tight mt-1">{value}</div>{sub && <div className="text-[11.5px] text-muted">{sub}</div>}</div>;
+}
+function Search({ id, value, onChange, placeholder }) {
+  return <label htmlFor={id} className="relative"><Icon name="Search" size={14} className="absolute left-2 top-2 text-muted" /><input id={id} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="h-8 pl-7 pr-2 rounded border border-line text-[12.5px] w-[220px]" /></label>;
+}
+function DataTable({ head, rows, render, empty, max = 300, minW = 760 }) {
+  if (!rows.length) return <div className="text-[13px] text-muted py-8 text-center">{empty}</div>;
+  return <><div className="scroll-x -mx-5 max-h-[480px] overflow-y-auto"><table className="tbl w-full text-[12.5px]" style={{ minWidth: minW }}>
+    <thead><tr className="text-left text-[11px] text-muted bg-[#F6F8FA]">{head.map((h, i) => <th key={i} className={`px-3 py-2 font-medium border-b border-line bg-[#F6F8FA] whitespace-nowrap ${i === 0 ? 'pl-5' : ''} ${i === head.length - 1 ? 'pr-5' : ''} ${h.r ? 'text-right' : ''}`}>{h.l}</th>)}</tr></thead>
+    <tbody>{rows.slice(0, max).map(render)}</tbody></table></div>
+    <div className="text-[11.5px] text-muted mt-2">{rows.length > max ? `Showing ${max} of ${nf(rows.length)}. Filter by block or coach, or search, to narrow the list.` : `${nf(rows.length)} row${rows.length === 1 ? '' : 's'}.`}</div></>;
+}
+const lastLabel = (d, asOf) => (d < 0 ? 'None in 90 days' : `${fmtShort(d)} · ${asOf - d}d ago`);
+
+/* ---------------- Overview ---------------- */
+function OverviewPage(p) {
+  const { S, P, st, rows, rowSt, level, drill, settings, pace, complete, fyPace, periodLabel, prevLabel, go, scopeName, sefT } = p;
+  const vs = prevLabel ? `vs ${prevLabel}` : ''; const lvl = lvlLabel(level);
+  const t = settings.compTarget, te = settings.engTarget;
+  const covRows = [...rows].sort((a, b) => (a.cov ?? -1) - (b.cov ?? -1)).map(r => ({ id: r.id, name: r.name, value: r.cov, status: rowSt(r).cov, tip: [['Allotted teachers', nf(r.m.teachersAllotted)], ['Observed', nf(r.m.teachersObserved)], ['Pooled coverage', f1(r.covPooled)]] }));
+  const obsRows = [...rows].sort((a, b) => (a.fyMean ?? -1) - (b.fyMean ?? -1)).map(r => ({ id: r.id, name: r.name, value: r.fyMean, status: rowSt(r).dist, tip: [['Obs per teacher, FY to date', r.fyMean == null ? '—' : r.fyMean.toFixed(2)], ['No obs this period', nf(r.m.dist[0])]] }));
+  const tblRows = rows.map(r => ({ ...r, st: rowSt(r) })); const total = { id: 'total', ...S, st };
+  const isCoach = level === 'coach';
+  const kpis = [
+    { k: 'load', label: isCoach ? 'Caseload' : 'Caseload per coach', short: 'Caseload', dot: '#5E7A99', unit: 'num', tl: 'Capacity input · no target', info: `${KPI.load.formula} ${KPI.load.action}`, target: settings.caseloadMax,
+      rate: r => r.load, fmt: v => (v == null ? '—' : Math.round(v)), status: r => (settings.caseloadMax != null && r.load > settings.caseloadMax ? 'red' : 'grey'),
+      cols: isCoach ? [{ label: 'Teachers', main: true }] : [{ label: 'Coaches', get: r => nf(r.coaches) }, { label: 'Avg teachers', main: true }] },
+    { k: 'cov', label: 'Teacher coverage', short: 'Coverage', dot: '#12305A', tl: complete ? 'Target 100% / quarter' : `Pace ${f0(pace)} · 100% by quarter end`, info: `${KPI.cov.formula} ${KPI.cov.action}`, target: pace,
+      rate: r => r.cov, status: r => r.st.cov, cols: [{ label: 'Allotted', get: r => nf(r.m.teachersAllotted) }, { label: 'Observed', get: r => nf(r.m.teachersObserved) }, { label: 'Coverage', main: true }] },
+    { k: 'dist', label: 'Obs per teacher', short: 'Obs / teacher', dot: '#0E7C86', unit: 'num', tl: `${settings.annualTarget}/yr · pace ${fyPace.toFixed(2)}`, info: KPI.dist.formula, target: fyPace,
+      rate: r => r.fyMean, fmt: v => (v == null ? '—' : v.toFixed(2)), status: r => r.st.dist, cols: [{ label: 'FY to date', main: true }] },
+    { k: 'comp', label: 'Competency (lowest)', short: 'Competency', dot: '#1C4478', tl: t == null ? 'Target X%' : `Target ${t}%`, info: `${KPI.comp.formula} ${KPI.comp.action}`, target: t,
+      rate: r => (r.m.compLow ? r.m.compLow.v : null), status: r => r.st.comp, cols: [{ label: 'Q', get: r => (r.m.compLow ? Q_LABEL[r.m.compLow.q] : '—') }, { label: '% meeting', main: true }] },
+    { k: 'eng', label: 'Engagement', short: 'Engagement', dot: '#D98A00', tl: te == null ? 'Target X%' : `Target ${te}%`, info: `${KPI.eng.formula} ${KPI.eng.action}`, target: te,
+      rate: r => r.m.eng, status: r => r.st.eng, cols: [{ label: '% meeting', main: true }] },
+    { k: 'idle', label: 'Idle 14 days', short: 'Idle coaches', dot: '#C8372D', count: true, tl: `Target 0 · ≤ ${settings.inactiveThreshold}`, info: `${KPI.idle.formula} ${KPI.idle.action}`, target: isCoach ? null : settings.inactiveThreshold,
+      rate: r => r.idle, fmt: (v, r) => (isCoach && r.id !== 'total' ? (r.elig ? (v ? 'Idle' : 'Active') : '—') : nf(v)), status: r => r.st.idle, cols: [{ label: 'Idle', main: true }] },
+    { k: 'chg', label: 'Rating change', short: 'Rating change', dot: '#3E6EA5', unit: 'num', tl: 'No target · Q1–Q8 matched', info: `${KPI.chg.formula} ${KPI.chg.action}`, target: null,
+      rate: r => (r.chg ? r.chg.mean : null), fmt: v => sgn(v), status: r => r.st.chg, cols: [{ label: 'Mean', main: true }, { label: '% improved', get: r => (r.chg ? f0(r.chg.up) : '—') }] },
+    { k: 'sef', label: 'SEF vs coach', short: 'SEF agreement', dot: '#7A5BA6', tl: settings.sefTarget == null ? 'Ideal 70% · target after pilot' : `Target ${settings.sefTarget}%`, info: `${KPI.sef.formula} ${KPI.sef.action}`, target: p.sefT,
+      rate: r => (r.sef.n ? r.sef.rate : null), status: r => r.st.sef, cols: [{ label: 'Co-obs', get: r => nf(r.sef.co) }, { label: 'Agreement', main: true }] },
+  ];
+  const legend = (w) => <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted mt-1"><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.green.bar }} />At or above {complete || w ? 'target' : 'pace'}</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.amber.bar }} />Slightly behind</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.red.bar }} />Further behind</span><span>· Lowest first · click a column to drill down</span></div>;
+  return <div className="flex flex-col gap-5">
+    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiCard title="Teacher coverage" value={f1(S.cov)} status={st.cov} onClick={() => go('coverage')} sub={<><b className="text-ink num">{nf(S.m.teachersObserved)}</b> of <b className="text-ink num">{nf(S.m.teachersAllotted)}</b> allotted teachers observed</>} targetLabel={complete ? '100%' : `pace ${f0(pace)}`} delta={<Delta cur={S.cov} prev={P && P.cov} label={vs} />} />
+      <KpiCard title="Observations per teacher" value={S.fyMean == null ? '—' : S.fyMean.toFixed(2)} unitNote="FY to date" status={st.dist} onClick={() => go('distribution')} sub={<>{f0(S.m.distAllotted ? (100 * S.m.dist[0]) / S.m.distAllotted : null)} of teachers had no observation this period</>} targetLabel={`${settings.annualTarget}/yr · pace ${fyPace.toFixed(1)}`} delta={null} />
+      <KpiCard title="Competency benchmark" value={S.m.compLow ? f1(S.m.compLow.v) : '—'} unitNote={S.m.compLow ? `lowest · ${Q_LABEL[S.m.compLow.q]}` : ''} status={st.comp} onClick={() => go('competency')} sub={S.m.compLow ? <>Q1–Q8 range {f0(S.m.compLow.v)}–{f0(S.m.compMax)}</> : 'No valid observations'} targetLabel={t == null ? 'X%' : `${t}%`} delta={<Delta cur={S.m.compLow && S.m.compLow.v} prev={P && P.m.compLow && P.m.compLow.v} label={vs} />} />
+      <KpiCard title="Student engagement" value={f1(S.m.eng)} status={st.eng} onClick={() => go('engagement')} sub={<><b className="text-ink num">{nf(S.m.engMet)}</b> of <b className="text-ink num">{nf(S.m.engDen)}</b> teachers meet ≥2 of Q9–Q11</>} targetLabel={te == null ? 'X%' : `${te}%`} delta={<Delta cur={S.m.eng} prev={P && P.m.eng} label={vs} />} />
+      <KpiCard title="Teachers per coach" value={S.load == null ? '—' : Math.round(S.load)} unitNote="average caseload" status={settings.caseloadMax != null && S.load > settings.caseloadMax ? 'red' : 'grey'} onClick={() => go('coverage')} sub={<><b className="text-ink num">{nf(S.coaches)}</b> active coaches · {nf(S.m.distAllotted)} allotted teachers</>} targetLabel="capacity input" delta={null} />
+      <KpiCard title="Coaches idle 14 days" value={nf(S.idle)} unitNote={`of ${nf(S.elig)} (${f1(S.idlePct)})`} status={st.idle} onClick={() => go('activity')} sub={level === 'district' ? 'Select a district for the named list' : 'Named list on the Coach Activity page'} targetLabel={`0 (≤${settings.inactiveThreshold})`} delta={null} />
+      <KpiCard title="Rating change (Q1–Q8)" value={S.chg ? sgn(S.chg.mean) : '—'} unitNote="mean levels" status={st.chg} onClick={() => go('change')} sub={S.chg ? <><b className="text-ink num">{f0(S.chg.up)}</b> of {nf(S.chg.n)} matched ratings improved</> : 'No matched ratings'} targetLabel="No target" delta={null} />
+      <KpiCard title="SEF vs coach agreement" value={S.sef.n ? f1(S.sef.rate) : '—'} status={st.sef} onClick={() => go('sef')} sub={<><b className="text-ink num">{nf(S.sef.co)}</b> co-observations · {nf(S.sef.n)} matched ratings</>} targetLabel={settings.sefTarget == null ? 'ideal 70%' : `${settings.sefTarget}%`} delta={<Delta cur={S.sef.n ? S.sef.rate : null} prev={P && P.sef.n ? P.sef.rate : null} label={vs} />} />
+    </div>
+    <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
+      <Panel title={`Teacher coverage by ${lvl.toLowerCase()}`} formula={`${KPI.cov.formula} ${KPI.cov.action}`} right={<button onClick={() => go('coverage')} className="text-[12px] text-teal hover:underline inline-flex items-center gap-1">Details <Icon name="ArrowRight" size={13} /></button>}>
+        <VCol rows={covRows} target={pace} targetLabel={complete ? 'Target 100%' : `Pace ${f0(pace)}`} onSelect={drill} />{legend(false)}
+      </Panel>
+      <Panel title={`Observations per teacher by ${lvl.toLowerCase()}`} formula={`Average observations per allotted teacher this financial year (1 Apr to ${fmtDay(p.asOf)}), against the pace towards ${settings.annualTarget} a year (${fyPace.toFixed(2)} today). ${KPI.dist.action}`} right={<button onClick={() => go('distribution')} className="text-[12px] text-teal hover:underline inline-flex items-center gap-1">Details <Icon name="ArrowRight" size={13} /></button>}>
+        <VCol rows={obsRows} unit="num" decimals={1} target={fyPace} targetLabel={`Pace ${fyPace.toFixed(2)}`} onSelect={drill} />{legend(true)}
+      </Panel>
+    </div>
+    <SectionTable title="KPI summary" desc={`All eight SEF Internal KPIs for each ${lvl.toLowerCase()}. Values in amber or red are below target; competency and engagement have no target yet (X%). ${level === 'district' ? 'Click a district to see its blocks.' : level === 'block' ? 'Click a block to see its coaches.' : 'Click a coach to focus on them.'}`}
+      periodLabel={periodLabel} rowLabel={lvl} rows={tblRows} total={total} totalLabel={`${scopeName} (total)`} onOpen={id => id !== 'total' && drill(id)} kpis={kpis} labelWidth={LW(level)} />
+  </div>;
+}
+
+/* ---------------- Coverage & caseload ---------------- */
+function CoveragePage(p) {
+  const { S, P, st, rows, rowSt, level, drill, settings, pace, complete, prevLabel, mTrend, scopeIds, f, covOf, cur, fy, asOf, setCoach, setBlock, coach, fyPace } = p;
+  const [q, setQ] = useState(''); const [sort, setSort] = useState('cov');
+  const lvl = lvlLabel(level).toLowerCase();
+  const covRows = [...rows].sort((a, b) => (a.cov ?? -1) - (b.cov ?? -1)).map(r => ({ id: r.id, name: r.name, value: r.cov, status: rowSt(r).cov, tip: [['Allotted teachers', nf(r.m.teachersAllotted)], ['Observed', nf(r.m.teachersObserved)], ['Not observed', nf(r.m.teachersAllotted - r.m.teachersObserved)], ['Pooled coverage', f1(r.covPooled)]] }));
+  const trend = mTrend.map(({ mo, A }) => ({ label: mo.short, value: covOf(A, scopeIds, scopeRaw(A, f)), pooled: derive(scopeRaw(A, f)).teacherCov }));
+  const coaches = scopeIds.filter(c => cur.K[c].coaches).map(c => { const r = cur.K[c]; const co = DB.coaches[c]; return { id: c, co, name: co.code, block: placeOf(co.block), load: r.distAllotted, allot: r.teachersAllotted, obs: r.teachersObserved,
+    cov: r.teachersAllotted ? (100 * r.teachersObserved) / r.teachersAllotted : null, fy: derive(fy.K[c]).meanObs, last: cur.lastSub[c] }; });
+  const list = coaches.filter(x => `${x.name} ${x.block}`.toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => sort === 'cov' ? (a.cov ?? -1) - (b.cov ?? -1) : sort === 'load' ? b.load - a.load : a.name.localeCompare(b.name));
+  const loadRows = [...coaches].sort((a, b) => b.load - a.load).slice(0, 25).map(x => ({ id: x.id, name: x.name, value: x.load, status: settings.caseloadMax != null && x.load > settings.caseloadMax ? 'red' : 'grey', tip: [['Where', x.block], ['Teachers allotted', nf(x.load)]] }));
+  const loads = coaches.map(x => x.load); const avg = loads.length ? loads.reduce((a, b) => a + b, 0) / loads.length : null;
+  const covSt = v => hb(v, pace, settings.band);
+  return <div className="flex flex-col gap-4">
+    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <Tile label={`Coverage (${settings.covMethod === 'avg' ? 'average of coaches' : 'pooled'})`} value={f1(S.cov)} status={st.cov} sub={<Delta cur={S.cov} prev={P && P.cov} label={prevLabel ? `vs ${prevLabel}` : ''} />} />
+      <Tile label="Teachers observed" value={`${nf(S.m.teachersObserved)} / ${nf(S.m.teachersAllotted)}`} sub={`${nf(S.m.teachersAllotted - S.m.teachersObserved)} not yet observed`} />
+      <Tile label="Average caseload" value={avg == null ? '—' : avg.toFixed(0)} sub={loads.length ? `teachers per coach · range ${Math.min(...loads)}–${Math.max(...loads)}` : ''} />
+      <Tile label="Coaches behind pace" value={`${coaches.filter(x => x.cov != null && x.cov < pace - settings.band).length} of ${coaches.length}`} sub={`more than ${settings.band} points behind ${complete ? 'target' : `pace (${f0(pace)})`}`} />
+    </div>
+    <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
+      <Panel title={`Coverage by ${lvl}`} formula={`${KPI.cov.formula} ${KPI.cov.action}`}
+        views={[{ label: 'Coverage %', node: <VCol rows={covRows} target={pace} targetLabel={complete ? 'Target 100%' : `Pace ${f0(pace)}`} onSelect={drill} height={320} /> },
+          { label: 'Over time', node: <Trend data={trend} lines={[{ key: 'value', name: 'Average of coaches', color: C.teal }, { key: 'pooled', name: 'Pooled', color: '#9AA4B0' }]} target={100} height={320} /> }]} />
+      <Panel title="Teachers allotted per coach (caseload)" formula={`${KPI.load.formula} ${KPI.load.action}${settings.caseloadMax == null ? ' Set a maximum caseload under Targets to flag coaches above it.' : ` Coaches above ${settings.caseloadMax} are shown in red.`}${coaches.length > 25 ? ` Largest 25 of ${coaches.length} coaches shown.` : ''}`}
+        right={<span className="text-[12px] text-muted">{settings.caseloadMax == null ? 'No target · capacity input' : `Max ${settings.caseloadMax}`}</span>}>
+        <HBar rows={loadRows} unit="count" max={Math.ceil((Math.max(...loadRows.map(r => r.value || 0), settings.caseloadMax || 0) * 1.15 + 1) / 5) * 5} target={settings.caseloadMax} targetLabel={settings.caseloadMax != null ? `Max ${settings.caseloadMax}` : undefined} onSelect={id => { setBlock(DB.coaches[id].block); setCoach(id); }} labelWidth={110} />
+      </Panel>
+    </div>
+    <Panel title="Coach table" formula={`Each coach against their own allotment. Caseload sits under the coach ID. Coverage is ${complete ? 'against 100%' : `read against today’s pace (${f0(pace)})`}. Click a coach to focus the dashboard on them.`}
+      right={<><Search id="ct-q" value={q} onChange={setQ} placeholder="Search coach or block" /><Seg options={['Lowest coverage', 'Largest caseload', 'Name']} value={['cov', 'load', 'name'].indexOf(sort)} onChange={i => setSort(['cov', 'load', 'name'][i])} /></>}>
+      <DataTable head={[{ l: 'Coach' }, { l: 'Teachers observed', r: 1 }, { l: 'Coverage', r: 1 }, { l: 'Not observed', r: 1 }, { l: 'Obs / teacher FYTD', r: 1 }, { l: 'Last submission' }]} rows={list} empty="No coaches match."
+        render={x => <tr key={x.id} onClick={() => { setBlock(x.co.block); setCoach(x.id); }} className={`border-b border-[#F0F2F5] hover:bg-[#F6FAFA] cursor-pointer ${coach === x.id ? 'bg-[#EAF4F5]' : ''}`}>
+          <td className="pl-5 pr-3 py-2"><div className="font-medium text-navy">{x.name}</div><div className="text-[11px] text-muted">{x.block} · caseload <b style={{ color: settings.caseloadMax != null && x.load > settings.caseloadMax ? '#9E2A22' : C.ink }}>{x.load}</b> teachers</div></td>
+          <td className="px-3 text-right num">{nf(x.obs)} / {nf(x.allot)}</td>
+          <td className="px-3 text-right"><span className="inline-block min-w-[52px] rounded px-1.5 py-0.5 num font-medium" style={quietStyle(covSt(x.cov))}>{f0(x.cov)}</span></td>
+          <td className="px-3 text-right num">{nf(x.allot - x.obs)}</td>
+          <td className="px-3 text-right num"><span style={{ color: x.fy != null && x.fy < fyPace * 0.85 ? '#9E2A22' : C.ink }}>{x.fy == null ? '—' : x.fy.toFixed(2)}</span></td>
+          <td className="px-3 pr-5 whitespace-nowrap">{lastLabel(x.last, asOf)}</td></tr>} />
+    </Panel>
+  </div>;
+}
+
+/* ---------------- Observation distribution ---------------- */
+function DistributionPage(p) {
+  const { S, rows, level, drill, settings, fyPace, periodLabel, qTrend, fy, f, asOf } = p;
+  const [tab, setTab] = useState(0); const [q, setQ] = useState('');
+  const lvl = lvlLabel(level).toLowerCase();
+  const dist = S.m.dist.map((n, i) => ({ name: DIST_LBL[i], n, share: S.m.distAllotted ? (100 * n) / S.m.distAllotted : 0 }));
+  const qDist = qTrend.map(({ q: qq, A }) => { const m = derive(scopeRaw(A, f)); const o = { label: qq.short }; m.dist.forEach((n, i) => { o['d' + i] = m.distAllotted ? (100 * n) / m.distAllotted : 0; o['n' + i] = n; }); return o; });
+  const lowCut = Math.max(1, Math.floor(fyPace)), highCut = Math.max(settings.annualTarget, Math.ceil(fyPace * settings.highFactor));
+  const list = useMemo(() => DB.teachers.filter(t => { const c = DB.coaches[t.coach]; return inScopeCoach(c, f) && c.join <= asOf && c.exit > asOf; }).map(t => ({ t, n: fy.snap.tCnt[t.id] })), [fy, f.district, f.block, f.coach, asOf]);
+  const low = list.filter(x => x.n < lowCut).sort((a, b) => a.n - b.n), high = list.filter(x => x.n >= highCut).sort((a, b) => b.n - a.n);
+  const shown = (tab === 0 ? low : high).filter(x => `${x.t.code} ${DB.schools[x.t.school].code} ${DB.coaches[x.t.coach].code} ${placeOf(x.t.block)}`.toLowerCase().includes(q.trim().toLowerCase()));
+  const zero = dist[0].share, high4 = S.m.distAllotted ? (100 * (S.m.dist[4] + S.m.dist[5])) / S.m.distAllotted : 0;
+  const reading = zero > 25 && high4 > 15 ? 'High spread with low coverage: visits look concentrated on a few teachers. Review school selection with the block coaches.'
+    : zero > 25 ? 'Coverage is low: many teachers are not being reached. Check caseload first, then agree a visit plan with the block coaches.'
+    : (S.m.meanObs || 0) < 1.5 ? 'Most teachers have been observed about once, with little follow-up coaching.' : 'High coverage with a healthy spread: this is follow-up coaching.';
+  return <div className="flex flex-col gap-4">
+    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <Tile label="Observations per teacher, FY to date" value={S.fyMean == null ? '—' : S.fyMean.toFixed(2)} sub={`Pace today ${fyPace.toFixed(2)} · target ${settings.annualTarget} a year`} />
+      <Tile label="Teachers with no observation" value={f0(zero)} sub={`${nf(S.m.dist[0])} of ${nf(S.m.distAllotted)} this period`} />
+      <Tile label="Low-support teachers" value={nf(low.length)} sub={`fewer than ${lowCut} observation${lowCut === 1 ? '' : 's'} this year`} />
+      <Tile label="High-support teachers" value={nf(high.length)} sub={`${highCut} or more observations this year`} />
+    </div>
+    <div className="grid gap-4 grid-cols-1 xl:grid-cols-5">
+      <Panel className="xl:col-span-2" title="Distribution in this period" formula={KPI.dist.formula}>
+        <div style={{ height: 230 }}><ResponsiveContainer width="100%" height="100%">
+          <BarChart data={dist} margin={{ top: 22, right: 8, left: -12, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke={C.grid} /><XAxis dataKey="name" tick={{ fontSize: 11, fill: C.ink }} axisLine={{ stroke: C.line }} tickLine={false} />
+            <YAxis tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
+            <Tooltip formatter={(v, n, it) => [`${nf(v)} teachers (${it.payload.share.toFixed(1)}%)`, 'Allotted teachers']} contentStyle={{ fontSize: 12 }} labelFormatter={l => `${l} observation${l === '1' ? '' : 's'}`} />
+            <Bar dataKey="n" radius={[3, 3, 0, 0]} isAnimationActive={false}>{dist.map((d, i) => <Cell key={i} fill={DIST_COL[i]} />)}<LabelList dataKey="share" position="top" formatter={v => `${v.toFixed(0)}%`} style={{ fontSize: 10.5, fill: C.muted }} /></Bar>
+          </BarChart></ResponsiveContainer></div>
+        <div className="mt-2"><Note tone={zero > 25 ? 'warn' : 'info'}>{reading}</Note></div>
+      </Panel>
+      <Panel className="xl:col-span-3" title="Distribution across time" formula="Share of allotted teachers by observations received, quarter by quarter (Q3 is quarter-to-date).">
+        <div className="mb-2"><DistLegend /></div>
+        <div style={{ height: 250 }}><ResponsiveContainer width="100%" height="100%">
+          <BarChart data={qDist} margin={{ top: 6, right: 8, left: -10, bottom: 0 }} barCategoryGap="28%">
+            <CartesianGrid vertical={false} stroke={C.grid} /><XAxis dataKey="label" tick={{ fontSize: 11.5, fill: C.ink }} axisLine={{ stroke: C.line }} tickLine={false} />
+            <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
+            <Tooltip formatter={(v, n, it) => [`${it.payload['n' + n.slice(1)]} teachers (${Number(v).toFixed(0)}%)`, `${DIST_LBL[+n.slice(1)]} obs`]} contentStyle={{ fontSize: 12 }} />
+            {DIST_LBL.map((l, i) => <Bar key={l} dataKey={'d' + i} stackId="a" fill={DIST_COL[i]} isAnimationActive={false} />)}
+          </BarChart></ResponsiveContainer></div>
+      </Panel>
+    </div>
+    <Panel title={`Distribution by ${lvl}`} formula={`Share of each ${lvl}'s allotted teachers by observations received in ${periodLabel}. Listed alphabetically; click a bar to drill down.`} right={<DistLegend />}>
+      <DistStack rows={[...rows].sort((a, b) => a.name.localeCompare(b.name)).map(r => ({ id: r.id, name: r.name, dist: r.m.dist }))} onSelect={drill} labelWidth={LW(level)} />
+    </Panel>
+    <Panel title="High- and low-support teachers" formula={`From the sheet: district leadership receives the list of teachers with high support (more coaching cycles) and low support (fewer than the target), to plan equitable support in the district review meeting. Observations this financial year to ${fmtDay(asOf)}: low support = fewer than ${lowCut} (the pace towards ${settings.annualTarget} a year); high support = ${highCut} or more (${settings.highFactor}× the pace). Both cut-offs are prototype choices under Targets.`}
+      right={<><Search id="sup-q" value={q} onChange={setQ} placeholder="Search teacher, school, coach" /><Seg options={[`Low support (${low.length})`, `High support (${high.length})`]} value={tab} onChange={setTab} /></>}>
+      <DataTable head={[{ l: 'Teacher ID' }, { l: 'School' }, { l: 'District · Block' }, { l: 'Assigned coach' }, { l: 'Observations this year', r: 1 }]} rows={shown} empty="No teachers in this list."
+        render={x => <tr key={x.t.id} className="border-b border-[#F0F2F5]"><td className="pl-5 pr-3 py-2 font-medium">{x.t.code}</td><td className="px-3">{DB.schools[x.t.school].code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.t.block)}</td><td className="px-3 text-navy">{DB.coaches[x.t.coach].code}</td>
+          <td className="px-3 pr-5 text-right num font-semibold" style={{ color: tab === 0 ? '#9E2A22' : C.ink }}>{x.n}</td></tr>} />
+    </Panel>
+  </div>;
+}
+
+/* ---------------- Teacher competencies ---------------- */
+function CompetencyPage(p) {
+  const { S, P, st, rows, level, drill, settings, setShowSettings, qTrend, f, compQ, setCompQ, prevLabel, win, cur, scopeName } = p;
+  const [below, setBelow] = useState(true); const [q, setQ] = useState('');
+  const t = settings.compTarget; const band = settings.band; const lvl = lvlLabel(level); const m = S.m;
+  const compRows = COMP_Q.map(k => ({ id: k, name: Q_LABEL[k], value: m.comp[k], status: hb(m.comp[k], t, band), tip: [['Teachers meeting', nf(m.raw.compMet[k])], ['Teachers assessed', nf(m.raw.compDen[k])]] })).sort((a, b) => (a.value ?? 999) - (b.value ?? 999));
+  const selQ = compQ ?? (m.compLow ? m.compLow.q : 0);
+  const curQ = QUARTERS.find(x => x.from <= win.to && x.end >= win.to);
+  const trend = qTrend.map(({ q: qq, A }) => { const s = derive(scopeRaw(A, f)); const o = { label: qq.short }; COMP_Q.forEach(k => { o['q' + k] = s.comp[k]; }); return o; });
+  const alpha = [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const QCOL = ['#12305A', '#1C4478', '#3E6EA5', '#0E7C86', '#5FAAB0', '#D98A00', '#C8372D', '#7A5BA6'];
+  const teachers = useMemo(() => DB.teachers.filter(tc => inScopeCoach(DB.coaches[tc.coach], f)).map(tc => ({ t: tc, v: cur.snap.lastQ[tc.id * NQ + selQ], d: cur.snap.lastQDay[tc.id * NQ + selQ] })).filter(x => x.v), [cur, selQ, f.district, f.block, f.coach]);
+  const shown = teachers.filter(x => (!below || x.v < 3) && `${x.t.code} ${DB.schools[x.t.school].code} ${DB.coaches[x.t.coach].code}`.toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => a.v - b.v || DB.coaches[a.t.coach].code.localeCompare(DB.coaches[b.t.coach].code));
+  return <div className="flex flex-col gap-4">
+    <div className="grid gap-4 grid-cols-1 xl:grid-cols-5">
+      <Panel className="xl:col-span-2" title="Competencies, weakest first" formula={`${KPI.comp.formula} ${KPI.comp.action}`}
+        right={<><Pill status={st.comp} label={t == null ? 'Target X% · awaiting baseline' : `Target ${t}%`} />{t == null && <button onClick={() => setShowSettings(true)} className="text-[12px] text-teal hover:underline">Set target</button>}</>}>
+        <HBar rows={compRows} target={t} labelWidth={40} onSelect={k => setCompQ(k)} selectedId={compQ ?? ''} />
+        <div className="text-[11px] text-muted mt-1">Click a question to see its trend and the teachers behind it. Change vs {prevLabel || 'previous period'}: {COMP_Q.map(k => { const d = P && P.m.comp[k] != null && m.comp[k] != null ? m.comp[k] - P.m.comp[k] : null; return `${Q_LABEL[k]} ${d == null ? '—' : (d > 0 ? '+' : '') + d.toFixed(1)}`; }).join(' · ')}</div>
+      </Panel>
+      <Panel className="xl:col-span-3" title="Competencies over time" formula="Teacher-based % meeting the benchmark per question, quarter by quarter. The selected question is drawn thicker.">
+        <div style={{ height: 300 }}><ResponsiveContainer width="100%" height="100%">
+          <LineChart data={trend} margin={{ top: 10, right: 18, left: -8, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke={C.grid} /><XAxis dataKey="label" tick={{ fontSize: 11, fill: C.muted }} axisLine={{ stroke: C.line }} tickLine={false} />
+            <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
+            <Tooltip formatter={(v, n) => [v == null ? '—' : `${Number(v).toFixed(1)}%`, n]} contentStyle={{ fontSize: 12 }} />
+            <Legend iconSize={9} wrapperStyle={{ fontSize: 11 }} onClick={e => setCompQ(Number(e.dataKey.slice(1)))} />
+            {t != null && <ReferenceLine y={t} stroke={C.navy} strokeDasharray="4 3" />}
+            {curQ && <ReferenceLine x={curQ.short} stroke="#B9C3CE" strokeWidth={14} strokeOpacity={0.3} />}
+            {COMP_Q.map(k => <Line key={k} type="monotone" dataKey={'q' + k} name={Q_LABEL[k]} stroke={QCOL[k]} strokeWidth={selQ === k ? 3.2 : 1.4} strokeOpacity={selQ === k ? 1 : 0.55} dot={{ r: selQ === k ? 3.5 : 2 }} isAnimationActive={false} connectNulls />)}
+          </LineChart></ResponsiveContainer></div>
+      </Panel>
+    </div>
+    <Panel title={`${lvl} × competency`} formula={`% of each ${lvl.toLowerCase()}'s observed teachers meeting the benchmark on each question. ${t == null ? 'Cells are shaded once a target is set.' : `Shaded cells are below ${t}%.`}`}>
+      <div className="scroll-x"><table className="text-[12.5px] min-w-[720px] w-full">
+        <thead><tr className="text-[11px] text-muted"><th className="text-left py-2 pr-3 font-medium">{lvl}</th>{COMP_Q.map(k => <th key={k} className={`py-2 px-1 font-medium text-center ${selQ === k ? 'text-navy' : ''}`}><button onClick={() => setCompQ(k)} className="hover:underline">{Q_LABEL[k]}</button></th>)}</tr></thead>
+        <tbody>{alpha.map(r => <tr key={r.id} className="border-t border-[#F0F2F5]"><td className="py-1 pr-3 whitespace-nowrap"><button onClick={() => drill(r.id)} className="hover:underline text-navy font-medium">{r.name}</button></td>
+          {COMP_Q.map(k => { const v = r.m.comp[k]; return <td key={k} className="px-0.5 py-0.5"><div className="rounded text-center py-1.5 num" style={t == null ? { color: C.ink, background: selQ === k ? '#F1F8F8' : undefined } : quietStyle(hb(v, t, band))}>{f0(v)}</div></td>; })}</tr>)}
+          <tr className="border-t-2 border-line bg-[#EFEDF8] font-semibold"><td className="py-1.5 pr-3">{scopeName} (total)</td>{COMP_Q.map(k => <td key={k} className="px-0.5 text-center num">{f0(m.comp[k])}</td>)}</tr></tbody></table></div>
+    </Panel>
+    <Panel title={`${Q_LABEL[selQ]}: teacher-level results`} formula="Each teacher’s latest valid rating on the selected question this period, with the assigned coach for follow-up (per the sheet). Benchmark = Level 3 or above."
+      right={<><label htmlFor="cp-below" className="inline-flex items-center gap-1.5 text-[12.5px]"><input id="cp-below" type="checkbox" checked={below} onChange={e => setBelow(e.target.checked)} />Below benchmark only</label><Search id="cp-q" value={q} onChange={setQ} placeholder="Search teacher, school, coach" />
+        <div className="flex flex-wrap gap-1">{COMP_Q.map(k => <button key={k} onClick={() => setCompQ(k)} className={`px-2 py-0.5 rounded text-[11.5px] border ${selQ === k ? 'bg-navy text-white border-navy' : 'border-line text-ink hover:bg-canvas'}`}>{Q_LABEL[k]}</button>)}</div></>}>
+      <div className="text-[12px] text-muted mb-2">{nf(teachers.filter(x => x.v >= 3).length)} of {nf(teachers.length)} assessed teachers meet the benchmark on {Q_LABEL[selQ]}.</div>
+      <DataTable head={[{ l: 'Teacher ID' }, { l: 'School' }, { l: 'District · Block' }, { l: 'Assigned coach' }, { l: 'Latest rating' }, { l: 'Observed' }]} rows={shown} empty="No teachers match."
+        render={x => <tr key={x.t.id} className="border-b border-[#F0F2F5]"><td className="pl-5 pr-3 py-2 font-medium">{x.t.code}</td><td className="px-3">{DB.schools[x.t.school].code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.t.block)}</td><td className="px-3 text-navy font-medium">{DB.coaches[x.t.coach].code}</td>
+          <td className="px-3"><Pill status={x.v >= 3 ? 'green' : x.v === 1 ? 'red' : 'amber'} small label={LEVEL[x.v]} /></td><td className="px-3 pr-5">{fmtShort(x.d)}</td></tr>} />
+    </Panel>
+  </div>;
+}
+
+/* ---------------- Student engagement ---------------- */
+function EngagementPage(p) {
+  const { S, P, st, rows, level, drill, settings, setShowSettings, mTrend, f, prevLabel, cur } = p;
+  const [below, setBelow] = useState(true); const [q, setQ] = useState('');
+  const te = settings.engTarget; const lvl = lvlLabel(level).toLowerCase(); const m = S.m;
+  const engRows = [...rows].sort((a, b) => a.name.localeCompare(b.name)).map(r => ({ id: r.id, name: r.name, value: r.m.eng, status: hb(r.m.eng, te, settings.band), tip: [['Meeting ≥2 of Q9–Q11', nf(r.m.engMet)], ['Observed on all three', nf(r.m.engDen)]] }));
+  const trend = mTrend.map(({ mo, A }) => { const s = derive(scopeRaw(A, f)); return { label: mo.short, eng: s.eng, q9: s.comp[8], q10: s.comp[9], q11: s.comp[10] }; });
+  const teachers = useMemo(() => DB.teachers.filter(tc => inScopeCoach(DB.coaches[tc.coach], f) && cur.snap.eng[tc.id] !== 255).map(tc => ({ t: tc, e: cur.snap.eng[tc.id], d: cur.snap.engDay[tc.id], r: ENG_Q.map(k => cur.snap.lastQ[tc.id * NQ + k]) })), [cur, f.district, f.block, f.coach]);
+  const shown = teachers.filter(x => (!below || x.e < 2) && `${x.t.code} ${DB.schools[x.t.school].code} ${DB.coaches[x.t.coach].code}`.toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => a.e - b.e || DB.coaches[a.t.coach].code.localeCompare(DB.coaches[b.t.coach].code));
+  const rc = v => <span className="inline-block w-7 rounded text-center num text-[12px] py-0.5" style={{ background: v === 0 ? '#F1F3F5' : v >= 3 ? '#E6F2E8' : '#FDF1DC', color: v === 0 ? '#9AA4B0' : v >= 3 ? '#1F6B30' : '#8A5600' }}>{v === 0 ? 'NO' : v}</span>;
+  return <div className="flex flex-col gap-4">
+    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <Tile label="Teachers meeting ≥2 of Q9–Q11" value={f1(m.eng)} status={st.eng} sub={<Delta cur={m.eng} prev={P && P.m.eng} label={prevLabel ? `vs ${prevLabel}` : ''} />} />
+      <Tile label="Teachers observed on all three" value={nf(m.engDen)} sub={`${nf(m.engMet)} meeting the benchmark`} />
+      {ENG_Q.slice(0, 2).map(k => <Tile key={k} label={`${Q_LABEL[k]} at benchmark`} value={f0(m.comp[k])} sub={`${nf(m.raw.compMet[k])} of ${nf(m.raw.compDen[k])} teachers`} />)}
+    </div>
+    <div className="grid gap-4 grid-cols-1 xl:grid-cols-5">
+      <Panel className="xl:col-span-3" title={`Student engagement by ${lvl}`} formula={`${KPI.eng.formula} ${KPI.eng.action}`} right={<><Pill status={st.eng} label={te == null ? 'Target X%' : `Target ${te}%`} />{te == null && <button onClick={() => setShowSettings(true)} className="text-[12px] text-teal hover:underline">Set target</button>}</>}>
+        <HBar rows={engRows} target={te} onSelect={drill} labelWidth={LW(level)} />
+      </Panel>
+      <Panel className="xl:col-span-2" title="Engagement over time" formula="Month by month for the current scope: the composite KPI and its three questions.">
+        <Trend data={trend} lines={[{ key: 'eng', name: 'Composite', color: C.navy }, { key: 'q9', name: 'Q9', color: '#5FAAB0' }, { key: 'q10', name: 'Q10', color: '#D98A00' }, { key: 'q11', name: 'Q11', color: '#9AA4B0' }]} target={te} height={300} />
+      </Panel>
+    </div>
+    <Panel title="Teacher-level results" formula="Each teacher’s latest observation with all three engagement questions rated this period, with the assigned coach for follow-up (per the sheet). Meeting = at benchmark (Level 3+) on at least 2 of the 3."
+      right={<><label htmlFor="en-below" className="inline-flex items-center gap-1.5 text-[12.5px]"><input id="en-below" type="checkbox" checked={below} onChange={e => setBelow(e.target.checked)} />Not meeting only</label><Search id="en-q" value={q} onChange={setQ} placeholder="Search teacher, school, coach" /></>}>
+      <DataTable head={[{ l: 'Teacher ID' }, { l: 'School' }, { l: 'District · Block' }, { l: 'Assigned coach' }, { l: 'Q9 · Q10 · Q11' }, { l: 'Result' }, { l: 'Observed' }]} rows={shown} empty="No teachers match."
+        render={x => <tr key={x.t.id} className="border-b border-[#F0F2F5]"><td className="pl-5 pr-3 py-2 font-medium">{x.t.code}</td><td className="px-3">{DB.schools[x.t.school].code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.t.block)}</td><td className="px-3 text-navy font-medium">{DB.coaches[x.t.coach].code}</td>
+          <td className="px-3"><span className="inline-flex gap-1">{x.r.map((v, i) => <span key={i}>{rc(v)}</span>)}</span></td><td className="px-3"><Pill status={x.e >= 2 ? 'green' : 'amber'} small label={`${x.e} of 3 at benchmark`} /></td><td className="px-3 pr-5">{fmtShort(x.d)}</td></tr>} />
+    </Panel>
+  </div>;
+}
+
+/* ---------------- Coach activity ---------------- */
+function ActivityPage(p) {
+  const { S, st, rows, rowSt, level, drill, settings, fortnights, scopeIds, idleOf, idleNow, asOf, cur, setBlock, setCoach } = p;
+  const [all, setAll] = useState(0);
+  const lvl = lvlLabel(level).toLowerCase();
+  const idleRows = [...rows].sort((a, b) => b.idle - a.idle || a.name.localeCompare(b.name)).map(r => ({ id: r.id, name: r.name, value: r.elig ? r.idle : null, status: rowSt(r).idle, tip: [['Idle coaches', nf(r.idle)], ['Deployed (14+ days)', nf(r.elig)]] }));
+  const trend = fortnights.map(fn => { const x = idleOf(scopeIds, fn.idle); return { label: fn.label, idle: x.idle, pct: x.pct }; });
+  const named = scopeIds.filter(c => idleNow[c]).map(c => ({ c, co: DB.coaches[c], idle: idleNow[c] === 2, last: cur.lastSub[c] })).sort((a, b) => b.idle - a.idle || a.last - b.last);
+  const shown = all ? named : named.filter(x => x.idle);
+  return <div className="flex flex-col gap-4">
+    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <Tile label="Idle coaches (no observation in 14 days)" value={nf(S.idle)} status={st.idle} />
+      <Tile label="% of deployed coaches" value={f1(S.idlePct)} sub={`${nf(S.elig)} deployed for 14+ days`} />
+      <Tile label={`${level === 'district' ? 'Districts' : 'Blocks'} above threshold (${settings.inactiveThreshold})`} value={level !== 'coach' ? nf(rows.filter(r => r.idle > settings.inactiveThreshold).length) : '—'} />
+      <Tile label="Window" value={`${fmtShort(asOf - 13)} – ${fmtShort(asOf)}`} sub="reviewed fortnightly" />
+    </div>
+    <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
+      <Panel title={`Idle coaches by ${lvl}`} formula={`${KPI.idle.formula} ${KPI.idle.action}`}>
+        <HBar rows={idleRows} unit="count" max={Math.max(settings.inactiveThreshold + 2, ...idleRows.map(r => r.value || 0)) + 1} target={level !== 'coach' ? settings.inactiveThreshold : null} targetLabel={`Threshold ${settings.inactiveThreshold}`} onSelect={drill} labelWidth={LW(level)} />
+      </Panel>
+      <Panel title="Fortnightly trend" formula="Idle coaches at the end of each fortnight (14-day windows ending on the dates shown), for the current scope.">
+        <div style={{ height: 260 }}><ResponsiveContainer width="100%" height="100%">
+          <BarChart data={trend} margin={{ top: 18, right: 8, left: -14, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke={C.grid} /><XAxis dataKey="label" tick={{ fontSize: 10.5, fill: C.muted }} axisLine={{ stroke: C.line }} tickLine={false} /><YAxis allowDecimals={false} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
+            <Tooltip cursor={{ fill: '#F1F3F5' }} formatter={(v, n, it) => [`${v} coaches (${f1(it.payload.pct)} of deployed)`, 'Idle']} contentStyle={{ fontSize: 12 }} />
+            <Bar dataKey="idle" radius={[3, 3, 0, 0]} fill="#C8372D" isAnimationActive={false}><LabelList dataKey="idle" position="top" style={{ fontSize: 10.5, fill: C.muted }} /></Bar>
+          </BarChart></ResponsiveContainer></div>
+      </Panel>
+    </div>
+    {p.district === '' ? <Panel title="Named coach list" formula="Per the sheet, the named coach list sits with the district view."><div className="text-[13px] text-muted py-8 text-center">Select a district, or click a district in the chart above, to see the named list of coaches and their last submission.</div></Panel> :
+    <Panel title="Named coach list" formula={`Coaches deployed for at least 14 days, with their last submitted observation. Per the sheet, the named list sits with the district view, so it appears once a district is selected. ${KPI.idle.action}`}
+      right={<Seg options={[`Idle (${named.filter(x => x.idle).length})`, `All coaches (${named.length})`]} value={all} onChange={setAll} />}>
+      <DataTable head={[{ l: 'Coach' }, { l: 'District · Block' }, { l: 'Status' }, { l: 'Last submission' }, { l: 'Days since', r: 1 }, { l: 'Deployed since' }]} rows={shown} empty="Every deployed coach submitted at least one observation in the last 14 days." minW={680}
+        render={x => <tr key={x.c} onClick={() => { setBlock(x.co.block); setCoach(x.c); }} className="border-b border-[#F0F2F5] hover:bg-[#F6FAFA] cursor-pointer"><td className="pl-5 pr-3 py-2 font-medium text-navy">{x.co.code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.co.block)}</td>
+          <td className="px-3"><Pill status={x.idle ? 'red' : 'green'} small label={x.idle ? 'No observation in 14 days' : 'Active'} /></td><td className="px-3">{x.last >= 0 ? fmtDay(x.last) : 'None in 90 days'}</td>
+          <td className="px-3 text-right num font-semibold" style={{ color: x.idle ? '#9E2A22' : C.ink }}>{x.last >= 0 ? asOf - x.last : '90+'}</td><td className="px-3 pr-5">{fmtDay(x.co.join)}</td></tr>} />
+    </Panel>}
+  </div>;
+}
+
+/* ---------------- Rating change ---------------- */
+function ChangePage(p) {
+  const { S, P, rows, rowSt, level, drill, f, cur, qTrend, prevLabel, setBlock, setCoach } = p;
+  const [sel, setSel] = useState('all'); const [dir, setDir] = useState(0); const [q, setQ] = useState('');
+  const qs = sel === 'all' ? COMP_Q : [sel]; const lvl = lvlLabel(level);
+  const raw = S.m.raw; const c = chgAll(raw, qs); const pc = P ? chgAll(P.m.raw, qs) : null;
+  const byQ = COMP_Q.map(k => { const x = chgAll(raw, [k]); return { name: `${Q_LABEL[k]}  ${x ? sgn(x.mean) : '—'}`, k, down: x ? x.down : 0, same: x ? x.same : 0, up: x ? x.up : 0, n: x ? x.n : 0, mean: x ? x.mean : null }; });
+  const grp = [...rows].map(r => { const x = chgAll(r.m.raw, qs); return { id: r.id, name: r.name, v: x ? x.mean : null, up: x ? x.up : null, n: x ? x.n : 0 }; }).sort((a, b) => (a.v ?? 99) - (b.v ?? 99));
+  const lim = Math.max(0.3, ...grp.map(g => Math.abs(g.v || 0))) * 1.25;
+  const trend = qTrend.map(({ q: qq, A }) => { const x = chgAll(scopeRaw(A, f), qs); return { label: qq.short, mean: x ? x.mean : null, up: x ? x.up : null, down: x ? x.down : null }; });
+  const teachers = useMemo(() => {
+    const L = cur.snap.lastQ, Pq = cur.snap.prevQ; const out = [];
+    DB.teachers.forEach(t => { if (!inScopeCoach(DB.coaches[t.coach], f)) return; let n = 0, sum = 0, up = 0, dn = 0, a = 0, b = 0;
+      qs.forEach(k => { const v = L[t.id * NQ + k], pv = Pq[t.id * NQ + k]; if (v && pv) { n++; sum += v - pv; if (v > pv) up++; else if (v < pv) dn++; a = pv; b = v; } });
+      if (n) out.push({ t, n, mean: sum / n, up, dn, a, b }); });
+    return out; }, [cur, sel, f.district, f.block, f.coach]);
+  const keep = x => dir === 0 ? x.mean < 0 : dir === 1 ? x.mean === 0 : dir === 2 ? x.mean > 0 : true;
+  const shown = teachers.filter(x => keep(x) && `${x.t.code} ${DB.coaches[x.t.coach].code} ${placeOf(x.t.block)}`.toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => a.mean - b.mean);
+  const cnt = [teachers.filter(x => x.mean < 0).length, teachers.filter(x => x.mean === 0).length, teachers.filter(x => x.mean > 0).length, teachers.length];
+  const one = sel !== 'all';
+  return <div className="flex flex-col gap-4">
+    <div className="flex flex-wrap items-center gap-2 text-[12.5px]"><span className="text-muted">Competency:</span>
+      {['all', ...COMP_Q].map(k => <button key={k} onClick={() => setSel(k)} className={`px-2.5 py-1 rounded border ${sel === k ? 'bg-navy text-white border-navy' : 'bg-white border-line text-ink hover:bg-canvas'}`}>{k === 'all' ? 'All Q1–Q8' : Q_LABEL[k]}</button>)}</div>
+    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <Tile label="Mean change (rating levels)" value={c ? sgn(c.mean) : '—'} status="grey" sub={pc ? `${sgn(pc.mean)} in ${prevLabel}` : 'No target: observation metric'} />
+      <Tile label="Ratings that improved" value={c ? f0(c.up) : '—'} sub={pc ? <Delta cur={c && c.up} prev={pc.up} label={`vs ${prevLabel}`} /> : ''} />
+      <Tile label="Ratings that declined" value={c ? f0(c.down) : '—'} sub={c ? `${f0(c.same)} unchanged` : ''} />
+      <Tile label="Matched ratings" value={c ? nf(c.n) : '0'} sub={`${nf(teachers.length)} teachers with two valid ratings this period`} />
+    </div>
+    <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
+      <Panel title="Change by question" formula={`${KPI.chg.formula} Bars show the share of matched ratings that went down, stayed the same or went up; the number after each question is the mean change.`}
+        right={<div className="flex gap-3 text-[11.5px] text-muted">{[['Declined', '#C8372D'], ['Same', '#C3CAD2'], ['Improved', '#0E7C86']].map(([l, col]) => <span key={l} className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: col }} />{l}</span>)}</div>}>
+        <div style={{ height: 290 }}><ResponsiveContainer width="100%" height="100%">
+          <BarChart data={byQ} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }} barCategoryGap={7}>
+            <CartesianGrid horizontal={false} stroke={C.grid} />
+            <XAxis type="number" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" width={84} tick={{ fontSize: 11, fill: C.ink }} interval={0} axisLine={false} tickLine={false} />
+            <Tooltip cursor={{ fill: 'rgba(18,48,90,0.05)' }} formatter={(v, n) => [`${Number(v).toFixed(0)}%`, n]} labelFormatter={(l, pl) => pl && pl[0] ? `${Q_LABEL[pl[0].payload.k]} · ${nf(pl[0].payload.n)} matched` : l} contentStyle={{ fontSize: 12 }} />
+            <Bar dataKey="down" name="Declined" stackId="a" fill="#C8372D" isAnimationActive={false} onClick={d => setSel(d.k)} cursor="pointer" />
+            <Bar dataKey="same" name="Same" stackId="a" fill="#C3CAD2" isAnimationActive={false} onClick={d => setSel(d.k)} cursor="pointer" />
+            <Bar dataKey="up" name="Improved" stackId="a" fill="#0E7C86" isAnimationActive={false} onClick={d => setSel(d.k)} cursor="pointer" />
+          </BarChart></ResponsiveContainer></div>
+      </Panel>
+      <Panel title="Over time" formula={`Quarter by quarter for ${one ? Q_LABEL[sel] : 'Q1–Q8'}: mean change in rating and the % of matched ratings that improved or declined.`}>
+        <Trend data={trend.map(t => ({ ...t, mean100: t.mean == null ? null : t.mean }))} lines={[{ key: 'up', name: '% improved', color: C.teal }, { key: 'down', name: '% declined', color: '#C8372D' }]} height={290} />
+        <div className="text-[11.5px] text-muted">Mean change: {trend.map(t => `${t.label} ${sgn(t.mean)}`).join(' · ')}</div>
+      </Panel>
+    </div>
+    <Panel title={`Mean change by ${lvl.toLowerCase()} · ${one ? Q_LABEL[sel] : 'Q1–Q8'}`} formula={`Mean change in rating level between each teacher’s two most recent valid observations, pooled over matched ratings. Bars left of zero mean ratings went down. Click a bar to drill down.`}>
+      <div style={{ height: Math.max(160, grp.length * 24 + 40) }}><ResponsiveContainer width="100%" height="100%">
+        <BarChart data={grp.map(g => ({ ...g, val: g.v ?? 0 }))} layout="vertical" margin={{ top: 4, right: 48, left: 4, bottom: 0 }} barCategoryGap={6}>
+          <CartesianGrid horizontal={false} stroke={C.grid} />
+          <XAxis type="number" domain={[-lim, lim]} tickFormatter={v => v.toFixed(1)} tick={{ fontSize: 10.5, fill: C.muted }} axisLine={false} tickLine={false} />
+          <YAxis type="category" dataKey="name" width={LW(level)} tick={{ fontSize: 11, fill: C.ink }} interval={0} axisLine={false} tickLine={false} />
+          <ReferenceLine x={0} stroke="#5B6B7B" />
+          <Tooltip cursor={{ fill: 'rgba(18,48,90,0.05)' }} formatter={(v, n, it) => [`${sgn(it.payload.v)} levels · ${f0(it.payload.up)} improved · ${nf(it.payload.n)} matched`, 'Mean change']} contentStyle={{ fontSize: 12 }} />
+          <Bar dataKey="val" isAnimationActive={false} cursor="pointer" onClick={d => drill(d.id)}>
+            {grp.map(g => <Cell key={g.id} fill={g.v == null ? '#C3CAD2' : g.v < 0 ? '#C8372D' : '#0E7C86'} />)}
+            <LabelList dataKey="v" position="right" formatter={v => sgn(v)} style={{ fontSize: 10.5, fill: C.muted }} /></Bar>
+        </BarChart></ResponsiveContainer></div>
+    </Panel>
+    <Panel title="Teacher-level change" formula={`Teachers with two valid ratings this period on ${one ? Q_LABEL[sel] : 'at least one of Q1–Q8'}, with the assigned coach, to guide individual support. ${one ? 'Previous → latest rating shown.' : 'Mean change across the matched questions.'}`}
+      right={<><Search id="ch-q" value={q} onChange={setQ} placeholder="Search teacher, coach, block" /><Seg options={[`Declined (${cnt[0]})`, `Same (${cnt[1]})`, `Improved (${cnt[2]})`, `All (${cnt[3]})`]} value={dir} onChange={setDir} /></>}>
+      <DataTable head={[{ l: 'Teacher ID' }, { l: 'District · Block' }, { l: 'Assigned coach' }, { l: one ? 'Previous → latest' : 'Questions up · same · down' }, { l: 'Change', r: 1 }]} rows={shown} empty="No teachers in this group."
+        render={x => <tr key={x.t.id} className="border-b border-[#F0F2F5]"><td className="pl-5 pr-3 py-2 font-medium">{x.t.code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.t.block)}</td>
+          <td className="px-3"><button className="text-navy font-medium hover:underline" onClick={() => { setBlock(x.t.block); setCoach(x.t.coach); }}>{DB.coaches[x.t.coach].code}</button></td>
+          <td className="px-3">{one ? <span className="num">{LEVEL[x.a]} → <b>{LEVEL[x.b]}</b></span> : <span className="num">{x.up} · {x.n - x.up - x.dn} · {x.dn} <span className="text-muted">of {x.n}</span></span>}</td>
+          <td className="px-3 pr-5 text-right num font-semibold" style={{ color: x.mean < 0 ? '#9E2A22' : x.mean > 0 ? '#1F6B30' : C.ink }}>{sgn(x.mean)}</td></tr>} />
+    </Panel>
+  </div>;
+}
+
+/* ---------------- SEF co-observation ---------------- */
+function SefPage(p) {
+  const { S, P, st, rows, rowSt, level, drill, f, qTrend, prevLabel, scopeIds, coK, sefT, settings, setBlock, setCoach, coach } = p;
+  const [order, setOrder] = useState(0); const [q, setQ] = useState('');
+  const sf = S.sef; const lvl = lvlLabel(level).toLowerCase();
+  const tLabel = settings.sefTarget == null ? 'Ideal 70%' : `Target ${settings.sefTarget}%`;
+  const qRows = Array.from({ length: NQ }, (_, k) => { const x = sf.q[k]; const r = x.n ? (100 * x.agree) / x.n : null;
+    return { id: k, name: Q_LABEL[k], value: r, status: x.n >= 5 ? hb(r, sefT, settings.band) : 'nodata', tip: [['Matched ratings', nf(x.n)], ['Mean abs. difference', x.n ? (x.abs / x.n).toFixed(2) : '—'], ['Coach − SEF (bias)', x.n ? sgn(x.bias / x.n) : '—']] }; });
+  const gRows = [...rows].sort((a, b) => (a.sef.rate ?? 999) - (b.sef.rate ?? 999)).map(r => ({ id: r.id, name: r.name, value: r.sef.n ? r.sef.rate : null, status: rowSt(r).sef, tip: [['Co-observations', nf(r.sef.co)], ['Matched ratings', nf(r.sef.n)], ['Mean abs. difference', r.sef.mad == null ? '—' : r.sef.mad.toFixed(2)]] }));
+  const trend = qTrend.map(({ q: qq, co }) => { const x = sefSum(co, scopeIds); return { label: qq.short, value: x.rate, n: x.co }; });
+  const coaches = scopeIds.map(c => ({ c, ...sefSum(coK, [c]), cc: DB.coaches[c] })).filter(x => x.n > 0)
+    .map(x => ({ ...x, worst: x.q.map((v, k) => ({ k, r: v.n ? v.agree / v.n : null })).filter(v => v.r != null && v.r < 1).sort((a, b) => a.r - b.r).slice(0, 3) }));
+  const list = coaches.filter(x => `${x.cc.code} ${placeOf(x.cc.block)}`.toLowerCase().includes(q.trim().toLowerCase())).sort((a, b) => order === 0 ? a.rate - b.rate : b.rate - a.rate);
+  const hi = qRows.filter(r => r.value != null && r.status !== 'nodata').sort((a, b) => a.value - b.value);
+  return <div className="flex flex-col gap-4">
+    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <Tile label="Agreement (coach = SEF rating)" value={sf.n ? f1(sf.rate) : '—'} status={st.sef} sub={P ? <Delta cur={sf.n ? sf.rate : null} prev={P.sef.n ? P.sef.rate : null} label={`vs ${prevLabel}`} /> : tLabel} />
+      <Tile label="SEF co-observations" value={nf(sf.co)} sub={`${nf(sf.n)} matched question ratings`} />
+      <Tile label="Mean absolute difference" value={sf.mad == null ? '—' : sf.mad.toFixed(2)} sub={sf.b == null ? '' : `levels · coaches rate ${sf.b > 0 ? 'higher' : 'lower'} than SEF by ${Math.abs(sf.b).toFixed(2)} on average`} />
+      <Tile label="Highest-variance questions" value={hi.length ? hi.slice(0, 2).map(r => r.name).join(', ') : '—'} sub={hi.length ? `lowest agreement: ${hi.slice(0, 2).map(r => f0(r.value)).join(', ')}` : 'Not enough matched ratings'} />
+    </div>
+    <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
+      <Panel title="Agreement by question" formula={`${KPI.sef.formula} Questions with fewer than 5 matched ratings are greyed. ${coach !== '' ? 'Showing the selected coach only.' : 'Click a coach in the table below to see their question-wise results.'}`}
+        right={<Pill status={st.sef} label={tLabel} />}>
+        <HBar rows={qRows} target={sefT} targetLabel={tLabel} labelWidth={40} />
+        <div className="text-[11px] text-muted mt-1">Hover a bar for the mean difference and direction of bias (positive = coach rates higher than SEF).</div>
+      </Panel>
+      <Panel title={`Agreement by ${lvl}`} formula={`% agreement for each ${lvl} on matched co-observations this period. Groups with fewer than 10 matched ratings are greyed. Click a bar to drill down.`}
+        views={[{ label: 'This period', node: <HBar rows={gRows} target={sefT} targetLabel={tLabel} onSelect={drill} labelWidth={LW(level)} /> },
+          { label: 'Over time', node: <Trend data={trend} lines={[{ key: 'value', name: '% agreement', color: '#7A5BA6' }]} target={sefT} height={300} /> }]} />
+    </div>
+    <Panel title="Coach variance table" formula={`Each coach’s agreement with SEF on matched co-observations, mean absolute difference, direction of bias and their three lowest-agreement questions. Sort by lowest or highest agreement to plan training (the sheet asks for both). Coaches with fewer than 10 matched ratings are marked as a small sample.`}
+      right={<><Search id="sef-q" value={q} onChange={setQ} placeholder="Search coach or block" /><Seg options={['Lowest agreement', 'Highest agreement']} value={order} onChange={setOrder} /></>}>
+      <DataTable head={[{ l: 'Coach' }, { l: 'District · Block' }, { l: 'Co-obs', r: 1 }, { l: 'Matched', r: 1 }, { l: 'Agreement', r: 1 }, { l: 'Mean abs. diff', r: 1 }, { l: 'Coach − SEF', r: 1 }, { l: 'Lowest-agreement questions' }]} rows={list} empty="No co-observations for coaches in this scope and period." minW={900}
+        render={x => <tr key={x.c} onClick={() => { setBlock(x.cc.block); setCoach(x.c); }} className={`border-b border-[#F0F2F5] hover:bg-[#F6FAFA] cursor-pointer ${coach === x.c ? 'bg-[#EAF4F5]' : ''}`}>
+          <td className="pl-5 pr-3 py-2 font-medium text-navy whitespace-nowrap">{x.cc.code}</td><td className="px-3 whitespace-nowrap">{placeOf(x.cc.block)}</td>
+          <td className="px-3 text-right num">{x.co}</td><td className="px-3 text-right num">{x.n}{x.n < 10 && <span className="text-[10.5px] text-muted"> · small</span>}</td>
+          <td className="px-3 text-right"><span className="inline-block min-w-[52px] rounded px-1.5 py-0.5 num font-medium" style={quietStyle(x.n >= 10 ? hb(x.rate, sefT, settings.band) : 'nodata')}>{f0(x.rate)}</span></td>
+          <td className="px-3 text-right num">{x.mad.toFixed(2)}</td><td className="px-3 text-right num" style={{ color: Math.abs(x.b) >= 0.3 ? '#8A5600' : C.ink }}>{sgn(x.b)}</td>
+          <td className="px-3 pr-5 text-[12px] text-muted whitespace-nowrap">{x.worst.map(w => `${Q_LABEL[w.k]} ${Math.round(100 * w.r)}%`).join(' · ')}</td></tr>} />
+    </Panel>
+  </div>;
+}
+/* ---------------- Settings ---------------- */
+function SettingsModal({ settings, onClose, onSave }) {
+  const [s, setS] = useState(settings);
+  const num = (k, v, max = 100) => setS(x => ({ ...x, [k]: v === '' ? null : Math.max(0, Math.min(max, Number(v))) }));
+  const field = (id, label, k, hint, ph = 'Not confirmed (X)', max = 100) => <label htmlFor={id} className="flex flex-col gap-1"><span className="text-[12.5px] font-medium text-ink">{label}</span>
+    <input id={id} type="number" min="0" max={max} value={s[k] == null ? '' : s[k]} placeholder={ph} onChange={e => num(k, e.target.value, max)} className="h-8 rounded border border-line px-2 text-[13px]" /><span className="text-[11px] text-muted">{hint}</span></label>;
+  return <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="Targets and configuration">
+    <div className="absolute inset-0 bg-[#0B1B33]/40" onClick={onClose} />
+    <div className="relative bg-white rounded-md shadow-2xl w-full max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <div className="px-5 py-3 border-b border-line flex items-center justify-between"><h2 className="font-semibold text-[15px]">Targets and configuration</h2><button onClick={onClose} aria-label="Close" className="p-1 rounded hover:bg-canvas"><Icon name="X" size={18} /></button></div>
+      <div className="p-5 flex flex-col gap-4">
+        <Note tone="info">From the sheet: teacher coverage 100% of allotment per BRC per quarter, 3 observations per teacher a year, zero idle coaches in every district (up to 5 in the first six months). Competency and engagement stay at X% until baseline data is in; SEF vs coach agreement is decided after the pilot (ideal 70%). Rating change has no target. Kept in this browser only.</Note>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {field('s-comp', 'Competency target (%)', 'compTarget', 'Sheet: x% · set once baseline data is in.')}
+          {field('s-eng', 'Student engagement target (%)', 'engTarget', 'Sheet: x% · set once baseline data is in.')}
+          {field('s-idle', 'Idle coaches threshold', 'inactiveThreshold', 'Sheet: 5 in the first six months, then 0.', '', 50)}
+          {field('s-ann', 'Observations per teacher per year', 'annualTarget', 'Sheet: 3 is the target annually.', '', 20)}
+          {field('s-cl', 'Maximum caseload per coach', 'caseloadMax', 'No target in the sheet; set to flag allotment problems.', 'Not set', 500)}
+          {field('s-sef', 'SEF vs coach agreement target (%)', 'sefTarget', 'Sheet: decided after the pilot; ideal 70% (used until set).', 'Ideal 70% (not set)')}
+          {field('s-hf', 'High support = this many × the pace', 'highFactor', 'Prototype rule for the high-support list.', '', 10)}
+          {field('s-band', 'Amber band (points below target)', 'band', 'Prototype display rule, not from the sheet.', '', 50)}
+          <label htmlFor="s-cov" className="flex flex-col gap-1"><span className="text-[12.5px] font-medium text-ink">Coverage roll-up</span>
+            <select id="s-cov" value={s.covMethod} onChange={e => setS(x => ({ ...x, covMethod: e.target.value }))} className="h-8 rounded border border-line px-2 text-[13px]">
+              <option value="avg">Average of coaches (sheet rule)</option><option value="pooled">Pooled</option></select>
+            <span className="text-[11px] text-muted">District coverage shows the average of all block coaches.</span></label>
+        </div>
+      </div>
+      <div className="px-5 py-3 border-t border-line flex justify-between gap-2">
+        <button onClick={() => setS(DEFAULT_SETTINGS)} className="text-[12.5px] text-muted hover:text-ink">Reset to defaults</button>
+        <div className="flex gap-2"><button onClick={onClose} className="px-3 py-1.5 rounded border border-line text-[12.5px]">Cancel</button>
+          <button onClick={() => onSave({ ...s, inactiveThreshold: s.inactiveThreshold ?? 5, annualTarget: s.annualTarget || 3, highFactor: s.highFactor || 3, band: s.band ?? 10 })} className="px-3 py-1.5 rounded bg-navy text-white text-[12.5px] font-medium">Apply</button></div>
+      </div>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body></html>
