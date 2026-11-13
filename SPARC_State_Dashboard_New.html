@@ -2,7 +2,6 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SPARC State Dashboard</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20rx%3D%2222%22%20fill%3D%22%23E0602E%22/%3E%3Cpath%20d%3D%22M60.7%2030.1A26%2026%200%201%200%2060.7%2069.9%22%20fill%3D%22none%22%20stroke%3D%22%23FBF1E6%22%20stroke-width%3D%2215%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M73%2044Q74.6%2051.4%2082%2053Q74.6%2054.6%2073%2062Q71.4%2054.6%2064%2053Q71.4%2051.4%2073%2044Z%22%20fill%3D%22%23F4A93A%22/%3E%3C/svg%3E">
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
 <script src="https://cdn.tailwindcss.com/3.4.17"></script>
@@ -865,7 +864,6 @@ function CoveragePage(p) {
       {[[`Coverage (${settings.covMethod === 'avg' ? 'average of coaches' : 'pooled'})`, f1(S.cov), st.cov], ['Teachers observed', `${nf(S.m.teachersObserved)} / ${nf(S.m.teachersAllotted)}`], ['Not yet observed', nf(S.m.teachersAllotted - S.m.teachersObserved)], [`${lvl[0].toUpperCase() + lvl.slice(1)}s below ${complete ? 'target' : 'pace'}`, `${below} of ${covRows.length}`, below ? 'amber' : 'green']].map(([l, v, s]) =>
         <div key={l} className="bg-white border border-line rounded-lg px-4 py-3"><div className="flex items-center justify-between text-[12px] text-muted">{l}{s && <StatusDot status={s} />}</div><div className="font-cond text-[24px] font-semibold text-ink num leading-tight mt-1">{v}</div></div>)}
     </div>
-    {!complete && <Note tone="info" icon="Gauge">The quarter is {f0(pace)} through. The target is 100% of allotted teachers observed by quarter end, so this view reads coverage against today’s pace.</Note>}
     <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
       <Panel title={`Coverage by ${lvl}`} formula={`${KPI.cov.formula} ${KPI.cov.action}`} right={<Delta cur={S.cov} prev={P && P.cov} label={prevLabel ? `vs ${prevLabel}` : ''} />}
         views={[{ label: 'Coverage %', node: <HBar rows={covRows} target={pace} targetLabel={complete ? 'Target 100%' : `Pace ${f0(pace)}`} max={110} onSelect={drill} selectedId={block} labelWidth={lw} /> },
