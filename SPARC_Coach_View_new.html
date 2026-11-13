@@ -586,7 +586,7 @@ function coachData(cid, q, asOf, priority) {
    7. APP — Individual Coach view, mobile-first (phone frame on desktop)
    ========================================================================= */
 const PAGES = [
-  { key: 'home', label: 'Home', icon: 'Home' },
+  { key: 'home', label: 'Dashboard', icon: 'LayoutDashboard' },
   { key: 'todo', label: 'Visits', icon: 'MapPinned' },
   { key: 'practice', label: 'Practice', icon: 'GraduationCap' },
   { key: 'engagement', label: 'Students', icon: 'MessagesSquare' },
@@ -605,6 +605,8 @@ function App() {
   const [histSel, setHistSel] = useState(null);
   const [settings, setSettingsState] = useState(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => { if (!menuOpen) return; const on = e => { if (e.key === 'Escape') setMenuOpen(false); }; window.addEventListener('keydown', on); return () => window.removeEventListener('keydown', on); }, [menuOpen]);
   useEffect(() => { const on = () => setPage(pageFromHash()); window.addEventListener('hashchange', on); return () => window.removeEventListener('hashchange', on); }, []);
   const go = (k, tab) => { if (tab != null) setTodoTab(tab); if (location.hash !== '#' + k) location.hash = k; setPage(k); const sc = document.getElementById('app-scroll'); if (sc) sc.scrollTop = 0; window.scrollTo({ top: 0 }); };
   const openTeacher = id => { setHistSel(id); go('history'); };
@@ -618,26 +620,27 @@ function App() {
   const badge = { todo: (cd.teachers.length - cd.observed) + (cd.schools.length - cd.visited) };
   return <div className="min-h-full bg-[#E9EDF2] md:py-6">
     {/* prototype controls: outside the phone, not part of the app */}
-    <div className="gutter md:mb-5 bg-white md:bg-transparent border-b border-line md:border-0 py-2.5">
+    <div className="gutter md:mb-5 bg-[#FDF6EF] md:bg-transparent border-b border-[#F1DCC9] md:border-0 py-2.5">
       <div className="max-w-[1200px] mx-auto flex flex-wrap items-center gap-3">
         <div className="hidden md:block mr-auto"><div className="font-cond text-[18px] font-semibold text-navy leading-tight">SPARC – Individual Coach View</div>
           <div className="text-[12px] text-muted">Mobile prototype · <span className="text-[#8A5600] font-semibold">DEMO DATA</span> · the selectors here exist only in the prototype</div></div>
-        <Sel id="f-district" label="District" value={district} onChange={v => { const d = Number(v); setDistrict(d); setCoach(DB.districts[d].coaches[0]); }}>{DB.districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
-        <Sel id="f-coach" label="View as coach" value={coach} onChange={v => setCoach(Number(v))}>{DB.districts[district].coaches.map(id => <option key={id} value={id}>{DB.coaches[id].code}</option>)}</Sel>
-        <Sel id="f-q" label="Quarter" value={qKey} onChange={setQKey}>{QUARTERS.map(x => <option key={x.key} value={x.key}>{x.short} · {x.label.split('·')[1].trim()}</option>)}</Sel>
-        <button type="button" onClick={() => setShowSettings(true)} className="h-8 inline-flex items-center gap-1.5 rounded border border-line bg-white px-3 text-[12.5px] text-ink hover:border-teal"><Icon name="SlidersHorizontal" size={14} />Settings</button>
+        <Sel id="f-district" label="District" icon="MapPin" value={district} onChange={v => { const d = Number(v); setDistrict(d); setCoach(DB.districts[d].coaches[0]); }}>{DB.districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
+        <Sel id="f-coach" label="View as coach" icon="UserRound" value={coach} onChange={v => setCoach(Number(v))}>{DB.districts[district].coaches.map(id => <option key={id} value={id}>{DB.coaches[id].code}</option>)}</Sel>
+        <Sel id="f-q" label="Quarter" icon="CalendarDays" active={qKey !== 'Q3'} value={qKey} onChange={setQKey}>{QUARTERS.map(x => <option key={x.key} value={x.key}>{x.short} · {x.label.split('·')[1].trim()}</option>)}</Sel>
+        <button type="button" onClick={() => setShowSettings(true)} className="h-9 inline-flex items-center gap-1.5 rounded-md border border-[#C9501C]/50 bg-white px-3 text-[12.5px] font-medium text-[#B2471A] hover:bg-[#FBE3D3]"><Icon name="SlidersHorizontal" size={14} />Settings</button>
       </div>
     </div>
     {/* the phone */}
     <div className="mx-auto w-full md:w-[392px] md:h-[min(852px,calc(100vh-130px))] md:min-h-[640px] md:rounded-[44px] md:border-[10px] md:border-[#0E1A2B] md:shadow-[0_24px_60px_rgba(11,27,51,0.28)] bg-canvas md:overflow-hidden flex flex-col relative">
       <header className="sticky md:static top-0 z-30 bg-[#C9501C] text-white px-4 pt-3 pb-3 md:pt-5" style={{ paddingTop: 'max(12px, env(safe-area-inset-top, 0px))' }}>
         <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen} className="relative w-9 h-9 -ml-1.5 grid place-items-center rounded-full hover:bg-white/15 shrink-0"><Icon name="Menu" size={22} />{badge.todo > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-[#F4A93A] ring-2 ring-[#C9501C]" />}</button>
           <div className="w-10 h-10 rounded-full bg-[#FBF1E6] text-[#C9501C] grid place-items-center shrink-0 font-cond font-semibold">{c.code.slice(-2)}</div>
           <div className="min-w-0 flex-1"><div className="text-[16px] font-semibold leading-tight">{c.code}</div><div className="text-[11.5px] text-white/90 truncate">{DB.districts[c.district].name} · {DB.blocks[c.block].short} · {q.short}</div></div>
           <div className="text-right text-[10.5px] text-white/90 leading-tight"><div className="inline-flex items-center gap-1"><Icon name={unsynced.length ? 'CloudOff' : 'Cloud'} size={13} />{unsynced.length ? `${unsynced.length} unsynced` : 'Synced'}</div><div>{live ? 'Updated' : 'Closed'} {fmtShort(asOf)}</div></div>
         </div>
       </header>
-      <main id="app-scroll" className="flex-1 md:overflow-y-auto px-3.5 pt-3.5 pb-24 md:pb-4">
+      <main id="app-scroll" className="flex-1 md:overflow-y-auto px-3.5 pt-3.5 pb-6 md:pb-4">
         {c.join > q.from && <div className="mb-3"><Note tone="info">Deployed on {fmtDay(c.join)}, after the quarter started. Pace counts from the start of the quarter.</Note></div>}
         {page === 'home' && <HomePage {...shared} />}
         {page === 'todo' && <TodoPage {...shared} />}
@@ -646,21 +649,35 @@ function App() {
         {page === 'history' && <HistoryPage {...shared} />}
         <div className="text-[10.5px] text-muted text-center mt-5 px-2">Demo data for design review. KPIs follow the “4. Individual Coach Level View” sheet (KF review copy). Your own allotment only; no ranking against other coaches.</div>
       </main>
-      <nav className="fixed md:static bottom-0 inset-x-0 z-30 bg-white border-t border-line grid grid-cols-5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} aria-label="App sections">
-        {PAGES.map(pg => <button key={pg.key} type="button" onClick={() => go(pg.key)} aria-current={page === pg.key ? 'page' : undefined}
-          className={`relative flex flex-col items-center gap-0.5 pt-2 pb-2 text-[10.5px] ${page === pg.key ? 'text-teal font-semibold' : 'text-muted'}`}>
-          <Icon name={pg.icon} size={20} />{pg.label}
-          {badge[pg.key] > 0 && <span className="absolute top-1 left-1/2 ml-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#C8372D] text-white text-[10px] font-semibold grid place-items-center">{badge[pg.key]}</span>}
-        </button>)}
-      </nav>
+      {menuOpen && <div className="fixed md:absolute inset-0 z-40 flex" role="dialog" aria-modal="true" aria-label="Menu">
+        <nav className="w-[248px] max-w-[80%] h-full bg-white shadow-xl flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} aria-label="App sections">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-line">
+            <span className="font-cond text-[17px] font-semibold text-navy">Menu</span>
+            <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu" className="w-9 h-9 -mr-2 grid place-items-center rounded-full text-muted hover:bg-canvas"><Icon name="X" size={20} /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto py-2">
+            {PAGES.map((pg, i) => { const on = page === pg.key, sub = i > 0;
+              return <button key={pg.key} type="button" onClick={() => { go(pg.key); setMenuOpen(false); }} aria-current={on ? 'page' : undefined}
+                className={`w-full flex items-center text-left border-l-4 ${sub ? 'gap-2.5 pl-10 pr-4 py-2.5 text-[13.5px]' : 'gap-3 px-4 py-3 text-[14.5px] font-semibold'} ${on ? 'bg-[#FBF1E6] text-[#C9501C] font-semibold border-[#C9501C]' : `${sub ? 'text-muted' : 'text-ink'} border-transparent hover:bg-canvas hover:text-ink`}`}>
+                <Icon name={pg.icon} size={sub ? 17 : 20} /><span className="flex-1">{pg.label}</span>
+                {badge[pg.key] > 0 && <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#C8372D] text-white text-[11px] font-semibold grid place-items-center">{badge[pg.key]}</span>}
+              </button>; })}
+          </div>
+        </nav>
+        <button type="button" className="flex-1 bg-black/40" onClick={() => setMenuOpen(false)} aria-label="Close menu" />
+      </div>}
     </div>
     {showSettings && <SettingsModal settings={settings} onClose={() => setShowSettings(false)} onSave={s => { setSettings(s); setShowSettings(false); }} />}
   </div>;
 }
-function Sel({ id, label, value, onChange, children }) {
-  return <label htmlFor={id} className="min-w-0">
+function Sel({ id, label, value, onChange, children, disabled, icon, active }) {
+  const on = active && !disabled;
+  return <label htmlFor={id} className="relative inline-flex items-center min-w-0">
     <span className="sr-only">{label}</span>
-    <select id={id} value={value} onChange={e => onChange(e.target.value)} className="h-8 rounded border border-line bg-white px-2 text-[12.5px] text-ink min-w-[120px]">{children}</select>
+    {icon && <Icon name={icon} size={15} className={`absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${disabled ? 'text-muted' : 'text-[#C9501C]'}`} />}
+    <select id={id} value={value} disabled={disabled} onChange={e => onChange(e.target.value)}
+      className={`appearance-none h-9 leading-[normal] rounded-md border ${icon ? 'pl-8' : 'pl-2.5'} pr-8 text-[12.5px] min-w-[130px] outline-none focus:ring-2 focus:ring-[#C9501C]/30 disabled:bg-[#F3F5F8] disabled:text-muted disabled:border-line ${on ? 'bg-[#FBE3D3] border-[#C9501C] text-[#8F3812] font-semibold' : 'bg-white border-[#E8D5C4] text-ink hover:border-[#C9501C]'}`}>{children}</select>
+    <Icon name="ChevronDown" size={15} className={`absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${disabled ? 'text-muted' : 'text-[#B2471A]'}`} />
   </label>;
 }
 /* ---- mobile building blocks ---- */

@@ -597,12 +597,22 @@ const SEF_IDEAL = 70;
    7. APP
    ========================================================================= */
 const PAGES = [
-  { key: 'overview', label: 'Overview', icon: 'LayoutDashboard' },
+  { key: 'overview', label: 'Dashboard', icon: 'LayoutDashboard' },
   { key: 'coverage', label: 'Coverage & Caseload', icon: 'Users' },
   { key: 'competency', label: 'Teacher Competencies', icon: 'Award' },
   { key: 'engagement', label: 'Student Engagement', icon: 'MessagesSquare' },
 ];
 const pageFromHash = () => { const h = (location.hash || '').replace('#', ''); return PAGES.some(p => p.key === h) ? h : 'overview'; };
+
+function SideMenu({ page, onGo }) {
+  return <div className="px-2 py-3 flex flex-col gap-0.5">
+    {PAGES.map((pg, i) => { const on = page === pg.key, sub = i > 0;
+      return <button key={pg.key} type="button" onClick={() => onGo(pg.key)} aria-current={on ? 'page' : undefined}
+        className={`w-full flex items-center text-left rounded-md ${sub ? 'gap-2.5 pl-8 pr-3 py-2 text-[13px]' : 'gap-2.5 px-3 py-2.5 text-[14px] font-semibold'} ${on ? 'bg-[#FBE3D3] text-[#9A3D14] font-semibold' : `${sub ? 'text-muted' : 'text-ink'} hover:bg-[#FDF3EC] hover:text-[#9A3D14]`}`}>
+        <Icon name={pg.icon} size={sub ? 16 : 18} /><span className="flex-1">{pg.label}</span>
+      </button>; })}
+  </div>;
+}
 
 function App() {
   const [page, setPage] = useState(pageFromHash());
@@ -614,6 +624,8 @@ function App() {
   const [coach, setCoach] = useState('');
   const [settings, setSettingsState] = useState(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => { if (!menuOpen) return; const on = e => { if (e.key === 'Escape') setMenuOpen(false); }; window.addEventListener('keydown', on); return () => window.removeEventListener('keydown', on); }, [menuOpen]);
   const [compQ, setCompQ] = useState(null);
   useEffect(() => { const on = () => setPage(pageFromHash()); window.addEventListener('hashchange', on); return () => window.removeEventListener('hashchange', on); }, []);
   const go = k => { if (location.hash !== '#' + k) location.hash = k; setPage(k); window.scrollTo({ top: 0 }); };
@@ -674,11 +686,15 @@ function App() {
   const up = () => { if (coach !== '') setCoach(''); else if (block !== '') setBlock0(''); else setDistrict(''); };
   return <div className="min-h-full">
     <Header {...{ view, setView, periodKey, setPeriodKey, periods, custom, setCustom, district, setDistrict, block, setBlock: setBlock0, coach, setCoach, setShowSettings, win, resetAll, isDefault }} />
-    <nav className="gutter bg-white border-b border-line sticky z-30" style={{ top: 'env(safe-area-inset-top,0px)' }}>
-      <div className="flex gap-1.5 overflow-x-auto py-2">
-        {PAGES.map(p => <button key={p.key} onClick={() => go(p.key)} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] whitespace-nowrap ${page === p.key ? 'bg-navy text-white font-semibold' : 'text-muted hover:text-ink hover:bg-canvas'}`}><Icon name={p.icon} size={15} />{p.label}</button>)}
-      </div>
-    </nav>
+    <div className="lg:hidden gutter bg-white border-b border-line sticky z-30 py-2" style={{ top: 'env(safe-area-inset-top,0px)' }}>
+      <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={menuOpen} className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-line text-[13px] text-ink hover:bg-canvas">
+        <Icon name="Menu" size={18} />Menu<span className="text-muted">·</span><span className="font-semibold">{PAGES.find(x => x.key === page).label}</span></button>
+    </div>
+    <div className="lg:flex">
+    <aside className="hidden lg:block w-[220px] shrink-0 bg-white border-r border-line">
+      <nav className="sticky top-0" aria-label="Dashboard sections"><SideMenu page={page} onGo={go} /></nav>
+    </aside>
+    <div className="flex-1 min-w-0">
     <div className="gutter py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
       <span className="inline-flex items-center gap-1 flex-wrap"><Icon name="MapPin" size={13} />
         <button className="hover:underline text-ink font-medium" onClick={() => { setDistrict(''); setBlock0(''); setCoach(''); }}>Punjab</button>
@@ -697,15 +713,31 @@ function App() {
       {page === 'engagement' && <EngagementPage {...shared} />}
     </main>
     <DemoFooter sheet="3. SEF Internal (KF review copy)" />
+    </div>
+    </div>
+    {menuOpen && <div className="fixed inset-0 z-50 flex lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+      <nav className="w-[260px] max-w-[80%] h-full bg-white shadow-xl flex flex-col" aria-label="Dashboard sections" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-line">
+          <span className="font-cond text-[17px] font-semibold text-navy">Menu</span>
+          <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu" className="w-9 h-9 -mr-2 grid place-items-center rounded-full text-muted hover:bg-canvas"><Icon name="X" size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto"><SideMenu page={page} onGo={k => { go(k); setMenuOpen(false); }} /></div>
+      </nav>
+      <button type="button" className="flex-1 bg-black/40" onClick={() => setMenuOpen(false)} aria-label="Close menu" />
+    </div>}
     {showSettings && <SettingsModal settings={settings} onClose={() => setShowSettings(false)} onSave={s => { setSettings(s); setShowSettings(false); }} />}
   </div>;
 }
 
 /* ---------------- Header ---------------- */
-function Sel({ id, label, value, onChange, children, disabled }) {
-  return <label htmlFor={id} className="min-w-0">
+function Sel({ id, label, value, onChange, children, disabled, icon, active }) {
+  const on = active && !disabled;
+  return <label htmlFor={id} className="relative inline-flex items-center min-w-0">
     <span className="sr-only">{label}</span>
-    <select id={id} value={value} disabled={disabled} onChange={e => onChange(e.target.value)} className="h-8 rounded border border-line bg-white px-2 text-[12.5px] text-ink disabled:bg-[#F3F5F8] disabled:text-muted min-w-[120px]">{children}</select>
+    {icon && <Icon name={icon} size={15} className={`absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${disabled ? 'text-muted' : 'text-[#C9501C]'}`} />}
+    <select id={id} value={value} disabled={disabled} onChange={e => onChange(e.target.value)}
+      className={`appearance-none h-9 leading-[normal] rounded-md border ${icon ? 'pl-8' : 'pl-2.5'} pr-8 text-[12.5px] min-w-[130px] outline-none focus:ring-2 focus:ring-[#C9501C]/30 disabled:bg-[#F3F5F8] disabled:text-muted disabled:border-line ${on ? 'bg-[#FBE3D3] border-[#C9501C] text-[#8F3812] font-semibold' : 'bg-white border-[#E8D5C4] text-ink hover:border-[#C9501C]'}`}>{children}</select>
+    <Icon name="ChevronDown" size={15} className={`absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${disabled ? 'text-muted' : 'text-[#B2471A]'}`} />
   </label>;
 }
 function Header({ view, setView, periodKey, setPeriodKey, periods, custom, setCustom, district, setDistrict, block, setBlock, coach, setCoach, setShowSettings, win, resetAll, isDefault }) {
@@ -725,24 +757,24 @@ function Header({ view, setView, periodKey, setPeriodKey, periods, custom, setCu
         <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-1.5 rounded border border-white/50 px-2.5 py-1.5 hover:bg-white/10"><Icon name="SlidersHorizontal" size={14} />Targets</button>
       </div>
     </div>
-    <div className="gutter bg-white border-b border-line py-2.5 flex flex-wrap items-center gap-3">
-      <Sel id="f-district" label="District" value={district} onChange={v => { setDistrict(v === '' ? '' : Number(v)); setBlock(''); setCoach(''); }}>
+    <div className="gutter bg-[#FDF6EF] border-b border-[#F1DCC9] py-2.5 flex flex-wrap items-center gap-2.5">
+      <Sel id="f-district" label="District" icon="MapPin" active={district !== ''} value={district} onChange={v => { setDistrict(v === '' ? '' : Number(v)); setBlock(''); setCoach(''); }}>
         <option value="">All districts</option>{DB.districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
-      <Sel id="f-block" label="Block" value={block} disabled={district === ''} onChange={v => { setBlock(v === '' ? '' : Number(v)); setCoach(''); }}>
+      <Sel id="f-block" label="Block" icon="Map" active={block !== ''} value={block} disabled={district === ''} onChange={v => { setBlock(v === '' ? '' : Number(v)); setCoach(''); }}>
         <option value="">All blocks</option>{district !== '' && DB.districts[district].blocks.map(b => <option key={b} value={b}>{DB.blocks[b].short}</option>)}</Sel>
-      <Sel id="f-coach" label="Coach ID" value={coach} disabled={district === ''} onChange={v => { const c = v === '' ? '' : Number(v); setCoach(c); if (c !== '') setBlock(DB.coaches[c].block); }}>
+      <Sel id="f-coach" label="Coach ID" icon="UserRound" active={coach !== ''} value={coach} disabled={district === ''} onChange={v => { const c = v === '' ? '' : Number(v); setCoach(c); if (c !== '') setBlock(DB.coaches[c].block); }}>
         <option value="">{district === '' ? 'Select a district' : 'All coaches'}</option>{coachOpts.map(c => <option key={c} value={c}>{DB.coaches[c].code}</option>)}</Sel>
       <div>
-        <div className="inline-flex h-8 rounded border border-line overflow-hidden" role="group" aria-label="Monthly or quarterly view">
-          {[['M', 'Monthly'], ['Q', 'Quarterly']].map(([k, l]) => <button key={k} onClick={() => { setView(k); setCustom(null); setPeriodKey(k === 'Q' ? 'Q3' : 'M11'); }} className={`px-3 text-[12.5px] ${view === k && !custom ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-canvas'}`}>{l}</button>)}
+        <div className="inline-flex h-9 p-0.5 gap-0.5 rounded-md border border-[#E8D5C4] bg-white" role="group" aria-label="Monthly or quarterly view">
+          {[['M', 'Monthly'], ['Q', 'Quarterly']].map(([k, l]) => <button key={k} onClick={() => { setView(k); setCustom(null); setPeriodKey(k === 'Q' ? 'Q3' : 'M11'); }} className={`px-3 rounded text-[12.5px] ${view === k && !custom ? 'bg-[#C9501C] text-white font-semibold' : 'text-ink hover:bg-[#FBE3D3]'}`}>{l}</button>)}
         </div></div>
-      <Sel id="f-period" label="Reporting period" value={custom ? 'custom' : periodKey} onChange={v => { if (v === 'custom') setCustom({ from: win.from, to: win.to }); else { setCustom(null); setPeriodKey(v); } }}>
+      <Sel id="f-period" label="Reporting period" icon="CalendarDays" active={!!custom || periodKey !== 'Q3'} value={custom ? 'custom' : periodKey} onChange={v => { if (v === 'custom') setCustom({ from: win.from, to: win.to }); else { setCustom(null); setPeriodKey(v); } }}>
         {periods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}<option value="custom">Custom range…</option></Sel>
       {custom && <><label htmlFor="f-from" className="inline-flex items-center gap-1.5"><span className="text-[12.5px] text-muted">From</span>
-        <input id="f-from" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(from)} onChange={e => e.target.value && setRange(toDay(e.target.value), to)} className="h-8 rounded border border-line px-2 text-[12.5px]" /></label>
+        <input id="f-from" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(from)} onChange={e => e.target.value && setRange(toDay(e.target.value), to)} className="h-9 rounded-md border border-[#E8D5C4] bg-white px-2 text-[12.5px] outline-none focus:ring-2 focus:ring-[#C9501C]/30" /></label>
         <label htmlFor="f-to" className="inline-flex items-center gap-1.5"><span className="text-[12.5px] text-muted">To</span>
-        <input id="f-to" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(to)} onChange={e => e.target.value && setRange(from, toDay(e.target.value))} className="h-8 rounded border border-line px-2 text-[12.5px]" /></label></>}
-      <button type="button" onClick={resetAll} disabled={isDefault} className="h-8 inline-flex items-center gap-1.5 rounded border border-line bg-white px-3 text-[12.5px] text-ink hover:bg-canvas hover:border-teal disabled:opacity-40 disabled:cursor-not-allowed"><Icon name="RotateCcw" size={14} />Reset filters</button>
+        <input id="f-to" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(to)} onChange={e => e.target.value && setRange(from, toDay(e.target.value))} className="h-9 rounded-md border border-[#E8D5C4] bg-white px-2 text-[12.5px] outline-none focus:ring-2 focus:ring-[#C9501C]/30" /></label></>}
+      <button type="button" onClick={resetAll} disabled={isDefault} className="h-9 inline-flex items-center gap-1.5 rounded-md border border-[#C9501C]/50 bg-white px-3 text-[12.5px] font-medium text-[#B2471A] hover:bg-[#FBE3D3] disabled:opacity-40 disabled:cursor-not-allowed"><Icon name="RotateCcw" size={14} />Reset filters</button>
     </div>
   </header>;
 }
@@ -854,7 +886,7 @@ function OverviewPage(p) {
         <VCol rows={obsRows} unit="num" decimals={1} target={fyPace} targetLabel={`Pace ${fyPace.toFixed(2)}`} onSelect={drill} />{legend(true)}
       </Panel>
     </div>
-    <SectionTable title="KPI summary" desc={`All eight SEF Internal KPIs for each ${lvl.toLowerCase()}. Values in amber or red are below target; competency and engagement have no target yet (X%). ${level === 'district' ? 'Click a district to see its blocks.' : level === 'block' ? 'Click a block to see its coaches.' : 'Click a coach to focus on them.'}`}
+    <SectionTable title="KPI summary"
       periodLabel={periodLabel} rowLabel={lvl} rows={tblRows} total={total} totalLabel={`${scopeName} (total)`} onOpen={id => id !== 'total' && drill(id)} kpis={kpis} labelWidth={LW(level)} />
   </div>;
 }

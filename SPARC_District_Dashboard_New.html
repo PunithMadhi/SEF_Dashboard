@@ -440,8 +440,29 @@ function Progress({ value, target, status }) {
 /* =========================================================================
    6. KPI CARDS — value, status, one line of context, target and change
    ========================================================================= */
-function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status, delta, foot, onClick, progress }) {
+function Gauge({ v, max, label }) {
+  const cx = 100, cy = 100, r = 72, sw = 36;
+  const fv = v == null ? 0 : Math.max(0, Math.min(1, v / max));
+  const pt = f => { const a = Math.PI * (1 - f); return `${(cx + r * Math.cos(a)).toFixed(2)} ${(cy - r * Math.sin(a)).toFixed(2)}`; };
+  const seg = (a, b) => `M${pt(a)} A${r} ${r} 0 0 1 ${pt(b)}`;
+  return <svg viewBox="0 0 200 104" className="w-full max-w-[210px] mx-auto block" role="img" aria-label={label}>
+    {v == null ? <path d={seg(0, 1)} fill="none" stroke="#D5DBE2" strokeWidth={sw} />
+      : <>{fv < 1 && <path d={seg(fv, 1)} fill="none" stroke="#E0A9B3" strokeWidth={sw} />}
+        {fv > 0 && <path d={seg(0, fv)} fill="none" stroke="#7BA3D4" strokeWidth={sw} />}</>}
+  </svg>;
+}
+function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status, delta, foot, onClick, progress, gauge }) {
   const tip = [achievement && achievement !== '—' ? `Achievement: ${achievement}` : null, foot].filter(Boolean).join(' · ');
+  if (gauge) return <button type="button" onClick={onClick} title={tip || undefined}
+    className="text-center rounded-2xl p-4 pt-5 flex flex-col items-center gap-2 min-w-0 transition-shadow hover:shadow-md" style={{ background: gauge.tint }}>
+    <span className="text-[14px] font-semibold text-ink leading-tight">{title}</span>
+    <div className="relative w-full mt-1">
+      <Gauge v={gauge.v} max={gauge.max} label={`${title}: ${value}`} />
+      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center"><span className="font-cond text-[28px] leading-none font-bold text-ink num">{value}</span></div>
+    </div>
+    {sub && <div className="text-[12.5px] text-ink font-medium leading-snug">{sub}</div>}
+    {unitNote && <div className="text-[11.5px] text-muted -mt-1">{unitNote}</div>}
+  </button>;
   return <button type="button" onClick={onClick} title={tip || undefined}
     className="text-left bg-white border border-line rounded-lg p-4 hover:border-[#9CC9CC] hover:shadow-sm transition-shadow flex flex-col gap-2.5 min-w-0">
     <div className="flex items-start justify-between gap-2"><span className="text-[12.5px] font-medium text-muted leading-tight">{title}</span><StatusDot status={status} /></div>
@@ -576,13 +597,23 @@ function schoolStatus(asOf, ids) {
    7. APP
    ========================================================================= */
 const PAGES = [
-  { key: 'overview', label: 'Overview', icon: 'LayoutDashboard' },
+  { key: 'overview', label: 'Dashboard', icon: 'LayoutDashboard' },
   { key: 'coverage', label: 'Coverage & Caseload', icon: 'Users' },
   { key: 'competency', label: 'Teacher Competencies', icon: 'Award' },
   { key: 'engagement', label: 'Student Engagement', icon: 'MessagesSquare' },
 ];
 const pageFromHash = () => { const h = (location.hash || '').replace('#', ''); return PAGES.some(p => p.key === h) ? h : 'overview'; };
 const DEFAULT_DISTRICT = 0;
+
+function SideMenu({ page, onGo }) {
+  return <div className="px-2 py-3 flex flex-col gap-0.5">
+    {PAGES.map((pg, i) => { const on = page === pg.key, sub = i > 0;
+      return <button key={pg.key} type="button" onClick={() => onGo(pg.key)} aria-current={on ? 'page' : undefined}
+        className={`w-full flex items-center text-left rounded-md ${sub ? 'gap-2.5 pl-8 pr-3 py-2 text-[13px]' : 'gap-2.5 px-3 py-2.5 text-[14px] font-semibold'} ${on ? 'bg-[#FBE3D3] text-[#9A3D14] font-semibold' : `${sub ? 'text-muted' : 'text-ink'} hover:bg-[#FDF3EC] hover:text-[#9A3D14]`}`}>
+        <Icon name={pg.icon} size={sub ? 16 : 18} /><span className="flex-1">{pg.label}</span>
+      </button>; })}
+  </div>;
+}
 
 function App() {
   const [page, setPage] = useState(pageFromHash());
@@ -594,6 +625,8 @@ function App() {
   const [coach, setCoach] = useState('');
   const [settings, setSettingsState] = useState(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => { if (!menuOpen) return; const on = e => { if (e.key === 'Escape') setMenuOpen(false); }; window.addEventListener('keydown', on); return () => window.removeEventListener('keydown', on); }, [menuOpen]);
   const [compQ, setCompQ] = useState(null);
   useEffect(() => { const on = () => setPage(pageFromHash()); window.addEventListener('hashchange', on); return () => window.removeEventListener('hashchange', on); }, []);
   const go = k => { if (location.hash !== '#' + k) location.hash = k; setPage(k); window.scrollTo({ top: 0 }); };
@@ -651,11 +684,15 @@ function App() {
   const isDefault = district === DEFAULT_DISTRICT && block === '' && coach === '' && view === 'Q' && periodKey === 'Q3' && !custom;
   return <div className="min-h-full">
     <Header {...{ view, setView, periodKey, setPeriodKey, periods, custom, setCustom, district, setDistrict, block, setBlock, coach, setCoach, setShowSettings, win, resetAll, isDefault }} />
-    <nav className="gutter bg-white border-b border-line sticky z-30" style={{ top: 'env(safe-area-inset-top,0px)' }}>
-      <div className="flex gap-1.5 overflow-x-auto py-2">
-        {PAGES.map(p => <button key={p.key} onClick={() => go(p.key)} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] whitespace-nowrap ${page === p.key ? 'bg-navy text-white font-semibold' : 'text-muted hover:text-ink hover:bg-canvas'}`}><Icon name={p.icon} size={15} />{p.label}</button>)}
-      </div>
-    </nav>
+    <div className="lg:hidden gutter bg-white border-b border-line sticky z-30 py-2" style={{ top: 'env(safe-area-inset-top,0px)' }}>
+      <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={menuOpen} className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-line text-[13px] text-ink hover:bg-canvas">
+        <Icon name="Menu" size={18} />Menu<span className="text-muted">·</span><span className="font-semibold">{PAGES.find(x => x.key === page).label}</span></button>
+    </div>
+    <div className="lg:flex">
+    <aside className="hidden lg:block w-[220px] shrink-0 bg-white border-r border-line">
+      <nav className="sticky top-0" aria-label="Dashboard sections"><SideMenu page={page} onGo={go} /></nav>
+    </aside>
+    <div className="flex-1 min-w-0">
     <div className="gutter py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
       <span className="inline-flex items-center gap-1"><Icon name="MapPin" size={13} />
         <button className="hover:underline text-ink font-medium" onClick={() => { setBlock(''); setCoach(''); }}>{DB.districts[district].name}</button>
@@ -673,15 +710,31 @@ function App() {
       {page === 'engagement' && <EngagementPage {...shared} />}
     </main>
     <DemoFooter sheet="2. District Stakeholder (KF review copy)" />
+    </div>
+    </div>
+    {menuOpen && <div className="fixed inset-0 z-50 flex lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+      <nav className="w-[260px] max-w-[80%] h-full bg-white shadow-xl flex flex-col" aria-label="Dashboard sections" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-line">
+          <span className="font-cond text-[17px] font-semibold text-navy">Menu</span>
+          <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu" className="w-9 h-9 -mr-2 grid place-items-center rounded-full text-muted hover:bg-canvas"><Icon name="X" size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto"><SideMenu page={page} onGo={k => { go(k); setMenuOpen(false); }} /></div>
+      </nav>
+      <button type="button" className="flex-1 bg-black/40" onClick={() => setMenuOpen(false)} aria-label="Close menu" />
+    </div>}
     {showSettings && <SettingsModal settings={settings} onClose={() => setShowSettings(false)} onSave={s => { setSettings(s); setShowSettings(false); }} />}
   </div>;
 }
 
 /* ---------------- Header ---------------- */
-function Sel({ id, label, value, onChange, children, disabled }) {
-  return <label htmlFor={id} className="min-w-0">
+function Sel({ id, label, value, onChange, children, disabled, icon, active }) {
+  const on = active && !disabled;
+  return <label htmlFor={id} className="relative inline-flex items-center min-w-0">
     <span className="sr-only">{label}</span>
-    <select id={id} value={value} disabled={disabled} onChange={e => onChange(e.target.value)} className="h-8 rounded border border-line bg-white px-2 text-[12.5px] text-ink disabled:bg-[#F3F5F8] disabled:text-muted min-w-[120px]">{children}</select>
+    {icon && <Icon name={icon} size={15} className={`absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${disabled ? 'text-muted' : 'text-[#C9501C]'}`} />}
+    <select id={id} value={value} disabled={disabled} onChange={e => onChange(e.target.value)}
+      className={`appearance-none h-9 leading-[normal] rounded-md border ${icon ? 'pl-8' : 'pl-2.5'} pr-8 text-[12.5px] min-w-[130px] outline-none focus:ring-2 focus:ring-[#C9501C]/30 disabled:bg-[#F3F5F8] disabled:text-muted disabled:border-line ${on ? 'bg-[#FBE3D3] border-[#C9501C] text-[#8F3812] font-semibold' : 'bg-white border-[#E8D5C4] text-ink hover:border-[#C9501C]'}`}>{children}</select>
+    <Icon name="ChevronDown" size={15} className={`absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${disabled ? 'text-muted' : 'text-[#B2471A]'}`} />
   </label>;
 }
 function Header({ view, setView, periodKey, setPeriodKey, periods, custom, setCustom, district, setDistrict, block, setBlock, coach, setCoach, setShowSettings, win, resetAll, isDefault }) {
@@ -701,23 +754,23 @@ function Header({ view, setView, periodKey, setPeriodKey, periods, custom, setCu
         <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-1.5 rounded border border-white/50 px-2.5 py-1.5 hover:bg-white/10"><Icon name="SlidersHorizontal" size={14} />Targets</button>
       </div>
     </div>
-    <div className="gutter bg-white border-b border-line py-2.5 flex flex-wrap items-center gap-3">
-      <Sel id="f-district" label="District" value={district} onChange={v => { setDistrict(Number(v)); setBlock(''); setCoach(''); }}>{DB.districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
-      <Sel id="f-block" label="Block" value={block} onChange={v => { setBlock(v === '' ? '' : Number(v)); setCoach(''); }}>
+    <div className="gutter bg-[#FDF6EF] border-b border-[#F1DCC9] py-2.5 flex flex-wrap items-center gap-2.5">
+      <Sel id="f-district" label="District" icon="MapPin" value={district} onChange={v => { setDistrict(Number(v)); setBlock(''); setCoach(''); }}>{DB.districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Sel>
+      <Sel id="f-block" label="Block" icon="Map" active={block !== ''} value={block} onChange={v => { setBlock(v === '' ? '' : Number(v)); setCoach(''); }}>
         <option value="">All blocks</option>{DB.districts[district].blocks.map(b => <option key={b} value={b}>{DB.blocks[b].short}</option>)}</Sel>
-      <Sel id="f-coach" label="Coach ID" value={coach} onChange={v => { const c = v === '' ? '' : Number(v); setCoach(c); if (c !== '') setBlock(DB.coaches[c].block); }}>
+      <Sel id="f-coach" label="Coach ID" icon="UserRound" active={coach !== ''} value={coach} onChange={v => { const c = v === '' ? '' : Number(v); setCoach(c); if (c !== '') setBlock(DB.coaches[c].block); }}>
         <option value="">All coaches</option>{coachOpts.map(c => <option key={c} value={c}>{DB.coaches[c].code}</option>)}</Sel>
       <div>
-        <div className="inline-flex h-8 rounded border border-line overflow-hidden" role="group" aria-label="Monthly or quarterly view">
-          {[['M', 'Monthly'], ['Q', 'Quarterly']].map(([k, l]) => <button key={k} onClick={() => { setView(k); setCustom(null); setPeriodKey(k === 'Q' ? 'Q3' : 'M11'); }} className={`px-3 text-[12.5px] ${view === k && !custom ? 'bg-navy text-white' : 'bg-white text-ink hover:bg-canvas'}`}>{l}</button>)}
+        <div className="inline-flex h-9 p-0.5 gap-0.5 rounded-md border border-[#E8D5C4] bg-white" role="group" aria-label="Monthly or quarterly view">
+          {[['M', 'Monthly'], ['Q', 'Quarterly']].map(([k, l]) => <button key={k} onClick={() => { setView(k); setCustom(null); setPeriodKey(k === 'Q' ? 'Q3' : 'M11'); }} className={`px-3 rounded text-[12.5px] ${view === k && !custom ? 'bg-[#C9501C] text-white font-semibold' : 'text-ink hover:bg-[#FBE3D3]'}`}>{l}</button>)}
         </div></div>
-      <Sel id="f-period" label="Reporting period" value={custom ? 'custom' : periodKey} onChange={v => { if (v === 'custom') setCustom({ from: win.from, to: win.to }); else { setCustom(null); setPeriodKey(v); } }}>
+      <Sel id="f-period" label="Reporting period" icon="CalendarDays" active={!!custom || periodKey !== 'Q3'} value={custom ? 'custom' : periodKey} onChange={v => { if (v === 'custom') setCustom({ from: win.from, to: win.to }); else { setCustom(null); setPeriodKey(v); } }}>
         {periods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}<option value="custom">Custom range…</option></Sel>
       {custom && <><label htmlFor="f-from" className="inline-flex items-center gap-1.5"><span className="text-[12.5px] text-muted">From</span>
-        <input id="f-from" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(from)} onChange={e => e.target.value && setRange(toDay(e.target.value), to)} className="h-8 rounded border border-line px-2 text-[12.5px]" /></label>
+        <input id="f-from" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(from)} onChange={e => e.target.value && setRange(toDay(e.target.value), to)} className="h-9 rounded-md border border-[#E8D5C4] bg-white px-2 text-[12.5px] outline-none focus:ring-2 focus:ring-[#C9501C]/30" /></label>
         <label htmlFor="f-to" className="inline-flex items-center gap-1.5"><span className="text-[12.5px] text-muted">To</span>
-        <input id="f-to" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(to)} onChange={e => e.target.value && setRange(from, toDay(e.target.value))} className="h-8 rounded border border-line px-2 text-[12.5px]" /></label></>}
-      <button type="button" onClick={resetAll} disabled={isDefault} className="h-8 inline-flex items-center gap-1.5 rounded border border-line bg-white px-3 text-[12.5px] text-ink hover:bg-canvas hover:border-teal disabled:opacity-40 disabled:cursor-not-allowed"><Icon name="RotateCcw" size={14} />Reset filters</button>
+        <input id="f-to" type="date" min={toISO(0)} max={toISO(ASOF)} value={toISO(to)} onChange={e => e.target.value && setRange(from, toDay(e.target.value))} className="h-9 rounded-md border border-[#E8D5C4] bg-white px-2 text-[12.5px] outline-none focus:ring-2 focus:ring-[#C9501C]/30" /></label></>}
+      <button type="button" onClick={resetAll} disabled={isDefault} className="h-9 inline-flex items-center gap-1.5 rounded-md border border-[#C9501C]/50 bg-white px-3 text-[12.5px] font-medium text-[#B2471A] hover:bg-[#FBE3D3] disabled:opacity-40 disabled:cursor-not-allowed"><Icon name="RotateCcw" size={14} />Reset filters</button>
     </div>
   </header>;
 }
@@ -809,13 +862,13 @@ function OverviewPage(p) {
   ];
   const legend = (w) => <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted mt-1"><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.green.bar }} />At or above {complete || w ? 'target' : 'pace'}</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.amber.bar }} />Slightly behind</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.red.bar }} />Further behind</span><span>· Lowest first · click a column to drill down</span></div>;
   return <div className="flex flex-col gap-5">
-    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-      <KpiCard title="Teacher coverage" value={f1(S.cov)} status={st.cov} onClick={() => go('coverage')} sub={<><b className="text-ink num">{nf(S.m.teachersObserved)}</b> of <b className="text-ink num">{nf(S.m.teachersAllotted)}</b> allotted teachers observed</>} targetLabel={complete ? '100%' : `pace ${f0(pace)}`} delta={<Delta cur={S.cov} prev={P && P.cov} label={vs} />} />
-      <KpiCard title="Observations per teacher" value={S.fyMean == null ? '—' : S.fyMean.toFixed(2)} unitNote="FY to date" status={st.dist} sub={<>{f0(S.m.distAllotted ? (100 * S.m.dist[0]) / S.m.distAllotted : null)} of teachers had no observation this period</>} targetLabel={`${settings.annualTarget}/yr · pace ${fyPace.toFixed(1)}`} delta={null} />
-      <KpiCard title="Competency benchmark" value={S.m.compLow ? f1(S.m.compLow.v) : '—'} unitNote={S.m.compLow ? `lowest · ${Q_LABEL[S.m.compLow.q]}` : ''} status={st.comp} onClick={() => go('competency')} sub={S.m.compLow ? <>Q1–Q8 range {f0(S.m.compLow.v)}–{f0(S.m.compMax)}</> : 'No valid observations'} targetLabel={t == null ? 'X%' : `${t}%`} delta={<Delta cur={S.m.compLow && S.m.compLow.v} prev={P && P.m.compLow && P.m.compLow.v} label={vs} />} />
-      <KpiCard title="Student engagement" value={f1(S.m.eng)} status={st.eng} onClick={() => go('engagement')} sub={<><b className="text-ink num">{nf(S.m.engMet)}</b> of <b className="text-ink num">{nf(S.m.engDen)}</b> teachers meet ≥2 of Q9–Q11</>} targetLabel={te == null ? 'X%' : `${te}%`} delta={<Delta cur={S.m.eng} prev={P && P.m.eng} label={vs} />} />
-      <KpiCard title="Coaches idle 14 days" value={nf(S.idle)} unitNote={`of ${nf(S.elig)} (${f1(S.idlePct)})`} status={st.idle} targetLabel={`0 (≤${settings.inactiveThreshold})`} delta={null} />
-      <KpiCard title="Schools not visited this quarter" value={f1(S.sch.pct)} status={st.sch} sub={<><b className="text-ink num">{nf(S.sch.notVisited)}</b> of <b className="text-ink num">{nf(S.sch.n)}</b> allotted schools</>} targetLabel="0 by quarter end" delta={null} />
+    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      <KpiCard title="Teacher coverage" value={f1(S.cov)} status={st.cov} gauge={{ v: S.cov, max: 100, tint: '#D9F0F1' }} onClick={() => go('coverage')} sub={<><b className="text-ink num">{nf(S.m.teachersObserved)}</b> of <b className="text-ink num">{nf(S.m.teachersAllotted)}</b> allotted teachers observed</>} targetLabel={complete ? '100%' : `pace ${f0(pace)}`} delta={<Delta cur={S.cov} prev={P && P.cov} label={vs} />} />
+      <KpiCard title="Observations per teacher" value={S.fyMean == null ? '—' : S.fyMean.toFixed(2)} unitNote="FY to date" status={st.dist} gauge={{ v: S.fyMean, max: Math.max(settings.annualTarget, Math.ceil(S.fyMean || 0)), tint: '#F2DADB' }} sub={<>{f0(S.m.distAllotted ? (100 * S.m.dist[0]) / S.m.distAllotted : null)} of teachers had no observation this period</>} targetLabel={`${settings.annualTarget}/yr · pace ${fyPace.toFixed(1)}`} delta={null} />
+      <KpiCard title="Competency benchmark" value={S.m.compLow ? f1(S.m.compLow.v) : '—'} unitNote={S.m.compLow ? `lowest · ${Q_LABEL[S.m.compLow.q]}` : ''} status={st.comp} gauge={{ v: S.m.compLow ? S.m.compLow.v : null, max: 100, tint: '#DCE6F7' }} onClick={() => go('competency')} sub={S.m.compLow ? <>Q1–Q8 range {f0(S.m.compLow.v)}–{f0(S.m.compMax)}</> : 'No valid observations'} targetLabel={t == null ? 'X%' : `${t}%`} delta={<Delta cur={S.m.compLow && S.m.compLow.v} prev={P && P.m.compLow && P.m.compLow.v} label={vs} />} />
+      <KpiCard title="Student engagement" value={f1(S.m.eng)} status={st.eng} gauge={{ v: S.m.eng, max: 100, tint: '#FBE6D6' }} onClick={() => go('engagement')} sub={<><b className="text-ink num">{nf(S.m.engMet)}</b> of <b className="text-ink num">{nf(S.m.engDen)}</b> teachers meet ≥2 of Q9–Q11</>} targetLabel={te == null ? 'X%' : `${te}%`} delta={<Delta cur={S.m.eng} prev={P && P.m.eng} label={vs} />} />
+      <KpiCard title="Coaches idle 14 days" value={nf(S.idle)} unitNote={`of ${nf(S.elig)} (${f1(S.idlePct)})`} status={st.idle} gauge={{ v: S.idle, max: Math.max(1, S.elig), tint: '#E6E1F4' }} targetLabel={`0 (≤${settings.inactiveThreshold})`} delta={null} />
+      <KpiCard title="Schools not visited this quarter" value={f1(S.sch.pct)} status={st.sch} gauge={{ v: S.sch.pct, max: 100, tint: '#DFF1E3' }} sub={<><b className="text-ink num">{nf(S.sch.notVisited)}</b> of <b className="text-ink num">{nf(S.sch.n)}</b> allotted schools</>} targetLabel="0 by quarter end" delta={null} />
     </div>
     <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
       <Panel title={`Teacher coverage by ${lvl.toLowerCase()}`} formula={`${KPI.cov.formula} ${KPI.cov.action}`} right={<button onClick={() => go('coverage')} className="text-[12px] text-teal hover:underline inline-flex items-center gap-1">Details <Icon name="ArrowRight" size={13} /></button>}>
@@ -825,7 +878,7 @@ function OverviewPage(p) {
         <VCol rows={obsRows} unit="num" decimals={1} target={fyPace} targetLabel={`Pace ${fyPace.toFixed(2)}`} onSelect={drill} />{legend(true)}
       </Panel>
     </div>
-    <SectionTable title="KPI summary" desc={`All seven District KPIs for each ${lvl.toLowerCase()}. Values in amber or red are below target; competency and engagement have no target yet (X%). ${level === 'block' ? 'Click a block to see its coaches.' : 'Click a coach to focus on them.'}`}
+    <SectionTable title="KPI summary"
       periodLabel={periodLabel} rowLabel={lvl} rows={tblRows} total={total} totalLabel={`${scopeName} (total)`} onOpen={id => id !== 'total' && drill(id)} kpis={kpis} labelWidth={LW(level)} />
   </div>;
 }
