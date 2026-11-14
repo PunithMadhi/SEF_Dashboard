@@ -595,6 +595,23 @@ const pageFromHash = () => { const h = (location.hash || '').replace('#', ''); r
 const DEFAULT_COACH = (() => { const q = QUARTERS[2]; const ids = DB.districts[0].coaches.filter(c => DB.coaches[c].join <= q.from);
   return ids.find(c => { const d = coachData(c, q, q.to, DEFAULT_SETTINGS.priority); return d.visited < d.schools.length && d.observed < d.teachers.length && d.schools.length >= 5; }) ?? ids[0]; })();
 
+const CURRENT_DASH = 'coach';
+const DASHBOARDS = [
+  { key: 'state', file: 'SPARC_State_Dashboard_New.html', label: 'State Dashboard', icon: 'Landmark' },
+  { key: 'district', file: 'SPARC_District_Dashboard_New.html', label: 'District Dashboard', icon: 'Building2' },
+  { key: 'sef', file: 'SPARC_SEF_Internal_Dashboard_new.html', label: 'SEF Internal', icon: 'ShieldCheck' },
+  { key: 'coach', file: 'SPARC_Coach_View_new.html', label: 'Coach View', icon: 'Smartphone' },
+];
+const DASH_ITEM = 'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-left text-[14px]';
+const DashLink = ({ d }) => <a href={d.file} className={`${DASH_ITEM} text-ink hover:bg-[#FDF3EC] hover:text-[#9A3D14]`}><Icon name={d.icon} size={18} /><span className="flex-1">{d.label}</span></a>;
+function DashMenu() {
+  return <div className="px-2 py-3 flex flex-col gap-0.5">
+    <div className="px-3 pb-1.5 text-[10.5px] uppercase tracking-[0.08em] text-muted font-semibold">Dashboards</div>
+    {DASHBOARDS.map(d => d.key !== CURRENT_DASH ? <DashLink key={d.key} d={d} />
+      : <div key={d.key} className={`${DASH_ITEM} bg-[#FBE3D3] font-semibold text-[#9A3D14]`} aria-current="page"><Icon name={d.icon} size={18} /><span className="flex-1">{d.label}</span></div>)}
+  </div>;
+}
+
 function App() {
   const [page, setPage] = useState(pageFromHash());
   const [district, setDistrict] = useState(DB.coaches[DEFAULT_COACH].district);
@@ -617,7 +634,11 @@ function App() {
   const shared = { cd, q, asOf, live, settings, go, todoTab, setTodoTab, histSel, setHistSel, openTeacher };
   const c = cd.c;
   const badge = { todo: (cd.teachers.length - cd.observed) + (cd.schools.length - cd.visited) };
-  return <div className="min-h-full bg-[#E9EDF2] md:py-6">
+  return <div className="lg:flex min-h-full">
+    <aside className="hidden lg:block w-[220px] shrink-0 bg-white border-r border-line">
+      <nav className="sticky top-0" aria-label="Dashboards"><DashMenu /></nav>
+    </aside>
+  <div className="flex-1 min-w-0 min-h-full bg-[#E9EDF2] md:py-6">
     {/* prototype controls: outside the phone, not part of the app */}
     <div className="gutter md:mb-5 bg-[#FDF6EF] md:bg-transparent border-b border-[#F1DCC9] md:border-0 py-2.5">
       <div className="max-w-[1200px] mx-auto flex flex-wrap items-center gap-3">
@@ -660,12 +681,14 @@ function App() {
                 <Icon name={pg.icon} size={sub ? 17 : 20} /><span className="flex-1">{pg.label}</span>
                 {badge[pg.key] > 0 && <span className="min-w-[20px] h-[20px] px-1.5 rounded-full bg-[#C8372D] text-white text-[11px] font-semibold grid place-items-center">{badge[pg.key]}</span>}
               </button>; })}
+            <div className="mt-3 pt-2 border-t border-line lg:hidden"><DashMenu /></div>
           </div>
         </nav>
         <button type="button" className="flex-1 bg-black/40" onClick={() => setMenuOpen(false)} aria-label="Close menu" />
       </div>}
     </div>
     {showSettings && <SettingsModal settings={settings} onClose={() => setShowSettings(false)} onSave={s => { setSettings(s); setShowSettings(false); }} />}
+  </div>
   </div>;
 }
 function Sel({ id, label, value, onChange, children, disabled, icon, active }) {

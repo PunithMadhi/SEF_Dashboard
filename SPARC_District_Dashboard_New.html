@@ -604,13 +604,26 @@ const PAGES = [
 const pageFromHash = () => { const h = (location.hash || '').replace('#', ''); return PAGES.some(p => p.key === h) ? h : 'overview'; };
 const DEFAULT_DISTRICT = 0;
 
+const CURRENT_DASH = 'district';
+const DASHBOARDS = [
+  { key: 'state', file: 'SPARC_State_Dashboard_New.html', label: 'State Dashboard', icon: 'Landmark' },
+  { key: 'district', file: 'SPARC_District_Dashboard_New.html', label: 'District Dashboard', icon: 'Building2' },
+  { key: 'sef', file: 'SPARC_SEF_Internal_Dashboard_new.html', label: 'SEF Internal', icon: 'ShieldCheck' },
+  { key: 'coach', file: 'SPARC_Coach_View_new.html', label: 'Coach View', icon: 'Smartphone' },
+];
+const DASH_ITEM = 'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-left text-[14px]';
+const DashLink = ({ d }) => <a href={d.file} className={`${DASH_ITEM} text-ink hover:bg-[#FDF3EC] hover:text-[#9A3D14]`}><Icon name={d.icon} size={18} /><span className="flex-1">{d.label}</span></a>;
 function SideMenu({ page, onGo }) {
   return <div className="px-2 py-3 flex flex-col gap-0.5">
-    {PAGES.map((pg, i) => { const on = page === pg.key, sub = i > 0;
-      return <button key={pg.key} type="button" onClick={() => onGo(pg.key)} aria-current={on ? 'page' : undefined}
-        className={`w-full flex items-center text-left rounded-md ${sub ? 'gap-2.5 pl-8 pr-3 py-2 text-[13px]' : 'gap-2.5 px-3 py-2.5 text-[14px] font-semibold'} ${on ? 'bg-[#FBE3D3] text-[#9A3D14] font-semibold' : `${sub ? 'text-muted' : 'text-ink'} hover:bg-[#FDF3EC] hover:text-[#9A3D14]`}`}>
-        <Icon name={pg.icon} size={sub ? 16 : 18} /><span className="flex-1">{pg.label}</span>
-      </button>; })}
+    <div className="px-3 pb-1.5 text-[10.5px] uppercase tracking-[0.08em] text-muted font-semibold">Dashboards</div>
+    {DASHBOARDS.map(d => d.key !== CURRENT_DASH ? <DashLink key={d.key} d={d} /> : <div key={d.key} className="flex flex-col gap-0.5">
+      <div className={`${DASH_ITEM} font-semibold text-[#9A3D14]`} aria-current="true"><Icon name={d.icon} size={18} /><span className="flex-1">{d.label}</span><Icon name="ChevronDown" size={15} /></div>
+      {PAGES.map(pg => { const on = page === pg.key;
+        return <button key={pg.key} type="button" onClick={() => onGo(pg.key)} aria-current={on ? 'page' : undefined}
+          className={`w-full flex items-center gap-2.5 pl-9 pr-3 py-2 rounded-md text-left text-[13px] ${on ? 'bg-[#FBE3D3] text-[#9A3D14] font-semibold' : 'text-muted hover:bg-[#FDF3EC] hover:text-[#9A3D14]'}`}>
+          <Icon name={pg.icon} size={16} /><span className="flex-1">{pg.label}</span>
+        </button>; })}
+    </div>)}
   </div>;
 }
 
