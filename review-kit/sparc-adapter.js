@@ -2,7 +2,7 @@
 // 1) Paste the Apps Script web app URL (ending in /exec) into `endpoint` below.
 // 2) Page awareness: each dashboard is its own HTML file and switches pages with #hash.
 window.reviewKitConfig = {
-  endpoint: '', // e.g. 'https://script.google.com/macros/s/AKfy…/exec'
+  endpoint: 'https://script.google.com/macros/s/AKfycbzItH0KwWF1RLx7lf7-hNHah_J76x4fj88MN4129u4egrKY_SZYZmgXxCRs1XcfCp6k/exec',
   project: 'sparc',
 };
 
