@@ -456,10 +456,15 @@ function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status
   if (gauge) return <div role="button" tabIndex={0} onClick={onClick} onKeyDown={e => { if (onClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }} title={tip || undefined}
     className="text-center rounded-2xl p-4 pt-5 flex flex-col items-center gap-2 min-w-0 transition-shadow hover:shadow-md cursor-pointer" style={{ background: gauge.tint }}>
     <span className="text-[14px] font-semibold text-ink leading-tight inline-flex items-center gap-1">{title}<InfoTip text={info} /></span>
-    <div className="relative w-full mt-1">
+    {gauge.bar ? <div className="w-full mt-1 h-[104px] flex flex-col justify-center gap-2.5">
+      <span className="font-cond text-[28px] leading-none font-bold text-ink num">{value}</span>
+      <div className="w-full h-5 rounded-full overflow-hidden flex" role="img" aria-label={`${title}: ${value}`} style={{ background: gauge.v == null ? '#D5DBE2' : '#E0A9B3' }}>
+        {gauge.v != null && <div className="h-full" style={{ width: `${Math.max(0, Math.min(100, (100 * gauge.v) / gauge.max))}%`, background: '#7BA3D4' }} />}</div>
+      {gauge.bar !== true && <div className="flex justify-between text-[11.5px] text-muted">{gauge.bar}</div>}
+    </div> : <div className="relative w-full mt-1">
       <Gauge v={gauge.v} max={gauge.max} label={`${title}: ${value}`} />
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-center"><span className="font-cond text-[28px] leading-none font-bold text-ink num">{value}</span></div>
-    </div>
+    </div>}
     {sub && <div className="text-[12.5px] text-ink font-medium leading-snug">{sub}</div>}
     {unitNote && <div className="text-[11.5px] text-muted -mt-1">{unitNote}</div>}
   </div>;
@@ -694,7 +699,6 @@ function App() {
         {block !== '' && <><Icon name="ChevronRight" size={12} /><span className="text-ink font-medium">{DB.blocks[block].short}</span></>}
       </span>
       <span>·</span><span>{periodLabel}</span>
-      {!complete && <span className="inline-flex items-center gap-1 text-[#2F5A87]"><Icon name="Gauge" size={13} />{f0(pace)} of the quarter has passed, so {f0(pace)} coverage today is on track</span>}
       {district !== '' && <button onClick={() => { setDistrict(''); setBlock(''); }} className="inline-flex items-center gap-1 text-teal hover:underline"><Icon name="RotateCcw" size={12} />Back to state view</button>}
     </div>
     <main className="gutter pb-10 pt-1">
@@ -836,8 +840,9 @@ function OverviewPage(p) {
   ];
   return <div className="flex flex-col gap-5">
     <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
-      <KpiCard title="Teacher coverage" value={f1(S.cov)} status={st.cov} gauge={{ v: S.cov, max: 100, tint: '#D9F0F1' }} onClick={() => go('coverage')}
-        sub={<><b className="text-ink num">{nf(S.m.teachersObserved)}</b> of <b className="text-ink num">{nf(S.m.teachersAllotted)}</b> allotted teachers observed</>} targetLabel={complete ? '100%' : `pace ${f0(pace)}`} delta={<Delta cur={S.cov} prev={P && P.cov} label={vs} />} />
+      <KpiCard title="Teacher coverage" value={f1(S.cov)} status={st.cov} onClick={() => go('coverage')}
+        gauge={{ v: S.m.teachersObserved, max: Math.max(1, S.m.teachersAllotted), tint: '#D9F0F1', bar: <><span><b className="text-ink num">{nf(S.m.teachersObserved)}</b> observed</span><span>{nf(S.m.teachersAllotted)} allotted</span></> }}
+        sub={<><b className="num">{nf(S.m.teachersAllotted - S.m.teachersObserved)}</b> teachers not yet observed</>} targetLabel={complete ? '100%' : `pace ${f0(pace)}`} delta={<Delta cur={S.cov} prev={P && P.cov} label={vs} />} />
       <KpiCard title="Observations per teacher" value={S.fyMean == null ? '—' : S.fyMean.toFixed(2)} status={st.dist} gauge={{ v: S.fyMean, max: Math.max(settings.annualTarget, Math.ceil(S.fyMean || 0)), tint: '#F2DADB' }}
         sub={<>Average observations per teacher this financial year · {f0(S.m.distAllotted ? (100 * S.m.dist[0]) / S.m.distAllotted : null)} of teachers had no observation in the selected period</>} targetLabel={`${settings.annualTarget}/yr · pace ${fyPace.toFixed(1)}`} delta={null} />
       <KpiCard title="Competency benchmark" value={S.m.compLow ? f1(S.m.compLow.v) : '—'} status={st.comp} gauge={{ v: S.m.compLow ? S.m.compLow.v : null, max: 100, tint: '#DCE6F7' }} onClick={() => go('competency')}
@@ -849,12 +854,12 @@ function OverviewPage(p) {
     </div>
     <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
       <Panel title={`Teacher coverage by ${lvl.toLowerCase()}`} formula={`${KPI.cov.formula} Lowest first. ${KPI.cov.action}`} right={<button onClick={() => go('coverage')} className="text-[12px] text-teal hover:underline inline-flex items-center gap-1">Details <Icon name="ArrowRight" size={13} /></button>}>
-        <VCol rows={covRows} target={pace} targetLabel={complete ? 'Target 100%' : `Expected ${f0(pace)}`} onSelect={drill} />
+        <VCol rows={covRows} target={complete ? 100 : null} targetLabel="Target 100%" onSelect={drill} />
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted mt-1"><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.green.bar }} />At or above {complete ? 'target' : 'expected'}</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.amber.bar }} />Within {settings.band} points</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.red.bar }} />Further behind</span><span>· Lowest first · click a column to drill down</span></div>
       </Panel>
       <Panel title={`Observations per teacher by ${lvl.toLowerCase()}`} formula={`Average observations per allotted teacher this financial year (1 Apr to ${fmtDay(p.asOf)}), against the pace towards the sheet’s target of ${settings.annualTarget} a year (${fyPace.toFixed(2)} today). ${KPI.dist.action}`}>
         <VCol rows={[...rows].sort((a, b) => (a.fyMean ?? -1) - (b.fyMean ?? -1)).map(r => ({ id: r.id, name: r.name, value: r.fyMean, status: rowSt(r).dist, tip: [['Obs per teacher, FY to date', r.fyMean == null ? '—' : r.fyMean.toFixed(2)], ['Teachers with no obs (period)', nf(r.m.dist[0])], ['Allotted teachers', nf(r.m.distAllotted)]] }))}
-          unit="num" decimals={1} target={fyPace} targetLabel={`Expected ${fyPace.toFixed(2)}`} onSelect={drill} />
+          unit="num" decimals={1} onSelect={drill} />
         <div className="text-[11.5px] text-muted mt-1">Lowest first. Teal: at or above expected · amber: up to 15% behind · red: further behind.</div>
       </Panel>
     </div>
@@ -870,20 +875,18 @@ function CoveragePage(p) {
   const covRows = [...rows].sort((a, b) => (a.cov ?? -1) - (b.cov ?? -1)).map(r => ({ id: r.id, name: r.name, value: r.cov, status: rowSt(r).cov, tip: [['Coaches', nf(r.coaches)], ['Allotted teachers', nf(r.m.teachersAllotted)], ['Observed', nf(r.m.teachersObserved)], ['Not observed', nf(r.m.teachersAllotted - r.m.teachersObserved)], ['Pooled coverage', f1(r.covPooled)]] }));
   const notRows = [...rows].sort((a, b) => (b.m.teachersAllotted - b.m.teachersObserved) - (a.m.teachersAllotted - a.m.teachersObserved)).map(r => ({ id: r.id, name: r.name, value: r.m.teachersAllotted - r.m.teachersObserved, status: rowSt(r).cov, tip: [['Not observed', nf(r.m.teachersAllotted - r.m.teachersObserved)], ['Allotted', nf(r.m.teachersAllotted)]] }));
   const trend = mTrend.map(({ mo, A }) => ({ label: mo.short, value: covOf(A, scopeIds, scopeRaw(A, f)), pooled: derive(scopeRaw(A, f)).teacherCov }));
-  const below = covRows.filter(r => r.value != null && r.value < pace - 1e-9).length;
   const coachCov = DB.coaches.filter(c => inScopeCoach(c, f) && p.cur.K[c.id].teachersAllotted > 0).map(c => (100 * p.cur.K[c.id].teachersObserved) / p.cur.K[c.id].teachersAllotted);
   const bands = [[0, 50], [50, 75], [75, 90], [90, 100], [100, 101]].map(([a, b]) => ({ name: b > 100 ? '100%' : `${a}–${b}%`, n: coachCov.filter(v => v >= a && v < b).length }));
   return <div className="flex flex-col gap-4">
-    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
       {[[`Teacher coverage (${settings.covMethod === 'avg' ? 'averaged across coaches' : 'all teachers combined'})`, f1(S.cov), st.cov, `${settings.covMethod === 'avg' ? 'Each coach’s coverage is the % of their allotted teachers who had at least one observation in the selected period. This card is the average of those coach percentages; for example, one coach at 40% and another at 60% gives 50%.' : 'All allotted teachers in scope who had at least one observation in the selected period ÷ all allotted teachers in scope. Every teacher counts equally, whichever coach they belong to.'} Coverage is on track when it is at least the share of the quarter that has passed (${f0(pace)} today); by the end of the quarter the target is 100%.`],
         ['Teachers observed', `${nf(S.m.teachersObserved)} / ${nf(S.m.teachersAllotted)}`, null, 'Teachers with at least one submitted observation form in the selected period, out of all teachers allotted to coaches. Each teacher counts once, however many times they were observed. Only teachers of coaches active in the period are included.'],
-        ['Not yet observed', nf(S.m.teachersAllotted - S.m.teachersObserved), null, 'Allotted teachers who have not had any observation in the selected period (allotted minus observed). These are the teachers coaches still need to observe.'],
-        [`${lvl[0].toUpperCase() + lvl.slice(1)}s behind ${complete ? 'target' : 'expected'}`, `${below} of ${covRows.length}`, below ? 'amber' : 'green', `Number of ${lvl}s whose teacher coverage is below ${complete ? 'the 100% target' : `the expected ${f0(pace)} for today, which is the share of the quarter that has passed`}. The chart below shows each ${lvl}, lowest first.`]].map(([l, v, s, info]) =>
+        ['Not yet observed', nf(S.m.teachersAllotted - S.m.teachersObserved), null, 'Allotted teachers who have not had any observation in the selected period (allotted minus observed). These are the teachers coaches still need to observe.']].map(([l, v, s, info]) =>
         <div key={l} className="bg-white border border-line rounded-lg px-4 py-3"><div className="flex items-center justify-between gap-2 text-[12px] text-muted"><span className="inline-flex items-center gap-1">{l}<InfoTip text={info} /></span>{s && <StatusDot status={s} />}</div><div className="font-cond text-[24px] font-semibold text-ink num leading-tight mt-1">{v}</div></div>)}
     </div>
     <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
       <Panel title={`Coverage by ${lvl}`} formula={`${KPI.cov.formula} ${KPI.cov.action}`} right={<Delta cur={S.cov} prev={P && P.cov} label={prevLabel ? `vs ${prevLabel}` : ''} />}
-        views={[{ label: 'Coverage %', node: <HBar rows={covRows} target={pace} targetLabel={complete ? 'Target 100%' : `Expected ${f0(pace)}`} max={100} onSelect={drill} selectedId={block} labelWidth={lw} /> },
+        views={[{ label: 'Coverage %', node: <HBar rows={covRows} target={complete ? 100 : null} targetLabel="Target 100%" max={100} onSelect={drill} selectedId={block} labelWidth={lw} /> },
           { label: 'Teachers not observed', node: <HBar rows={notRows} unit="count" max={Math.max(...notRows.map(r => r.value || 0)) * 1.15 + 1} onSelect={drill} selectedId={block} labelWidth={lw} /> }]} />
       <div className="flex flex-col gap-4">
         <Panel title="Coverage over time" formula="Quarter-to-date coverage at the end of each month (resets each quarter), for the current scope. Average of coaches and pooled are both shown.">
@@ -959,9 +962,10 @@ function EngagementPage(p) {
   const comps = ENG_Q.map(q => ({ name: Q_LABEL[q], v: m.comp[q], n: m.raw.compDen[q], met: m.raw.compMet[q] }));
   return <div className="flex flex-col gap-4">
     <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
-      {[['Teachers observed on all 3 engagement questions', nf(m.engDen)], ['Teachers meeting student engagement benchmark', f1(m.eng), st.eng], ['Target', te == null ? 'X% · after baseline' : `${te}%`]].map(([l, v, s], i) =>
+      {[['Teachers observed on all 3 engagement questions', `${nf(m.engDen)} (${f1(m.teachersObserved ? (100 * m.engDen) / m.teachersObserved : null)})`, null, `of ${nf(m.teachersObserved)} teachers observed in the period`], ['Teachers meeting student engagement benchmark', f1(m.eng), st.eng], ['Target', te == null ? 'X% · after baseline' : `${te}%`]].map(([l, v, s, sub], i) =>
         <div key={l} className="bg-white border border-line rounded-lg px-4 py-3"><div className="flex items-center justify-between text-[12px] text-muted">{l}{s && <StatusDot status={s} />}</div>
           <div className="font-cond text-[24px] font-semibold text-ink num leading-tight mt-1">{v}</div>
+          {sub && <div className="text-[11.5px] text-muted">{sub}</div>}
           {i === 2 && te == null && <button onClick={() => setShowSettings(true)} className="text-[12px] text-teal hover:underline">Set target</button>}</div>)}
     </div>
     <div className="grid gap-4 grid-cols-1 xl:grid-cols-5">

@@ -713,7 +713,6 @@ function App() {
         {coach !== '' && <><Icon name="ChevronRight" size={12} /><span className="text-ink font-medium">{DB.coaches[coach].code}</span></>}
       </span>
       <span>·</span><span>{periodLabel}</span>
-      {!complete && <span className="inline-flex items-center gap-1 text-[#2F5A87]"><Icon name="Gauge" size={13} />{f0(pace)} of the quarter has passed, so {f0(pace)} coverage today is on track</span>}
       {block !== '' && <button onClick={() => { setBlock(''); setCoach(''); }} className="inline-flex items-center gap-1 text-teal hover:underline"><Icon name="RotateCcw" size={12} />Back to district view</button>}
     </div>
     <main className="gutter pb-10 pt-1">
@@ -885,10 +884,10 @@ function OverviewPage(p) {
     </div>
     <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
       <Panel title={`Teacher coverage by ${lvl.toLowerCase()}`} formula={`${KPI.cov.formula} ${KPI.cov.action}`} right={<button onClick={() => go('coverage')} className="text-[12px] text-teal hover:underline inline-flex items-center gap-1">Details <Icon name="ArrowRight" size={13} /></button>}>
-        <VCol rows={covRows} target={pace} targetLabel={complete ? 'Target 100%' : `Expected ${f0(pace)}`} onSelect={drill} />{legend(false)}
+        <VCol rows={covRows} target={complete ? 100 : null} targetLabel="Target 100%" onSelect={drill} />{legend(false)}
       </Panel>
       <Panel title={`Observations per teacher by ${lvl.toLowerCase()}`} formula={`Average observations per allotted teacher this financial year (1 Apr to ${fmtDay(p.asOf)}), against the pace towards ${settings.annualTarget} a year (${fyPace.toFixed(2)} today). ${KPI.dist.action}`}>
-        <VCol rows={obsRows} unit="num" decimals={1} target={fyPace} targetLabel={`Expected ${fyPace.toFixed(2)}`} onSelect={drill} />{legend(true)}
+        <VCol rows={obsRows} unit="num" decimals={1} onSelect={drill} />{legend(true)}
       </Panel>
     </div>
     <SectionTable title="KPI summary"
@@ -918,7 +917,7 @@ function CoveragePage(p) {
     </div>
     <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
       <Panel title={`Coverage by ${lvl}`} formula={`${KPI.cov.formula} ${KPI.cov.action}`}
-        views={[{ label: 'Coverage %', node: <VCol rows={covRows} target={pace} targetLabel={complete ? 'Target 100%' : `Expected ${f0(pace)}`} onSelect={drill} height={320} /> },
+        views={[{ label: 'Coverage %', node: <VCol rows={covRows} target={complete ? 100 : null} targetLabel="Target 100%" onSelect={drill} height={320} /> },
           { label: 'Over time', node: <Trend data={trend} lines={[{ key: 'value', name: 'Average across coaches', color: C.teal }, { key: 'pooled', name: 'All teachers combined', color: C.navy, dash: true }]} target={100} height={320} /> }]} />
       <Panel title="Teachers allotted per coach (caseload)" formula={`${KPI.load.formula} ${KPI.load.action}${settings.caseloadMax == null ? ' Set a maximum caseload under Targets to flag coaches above it.' : ` Coaches above ${settings.caseloadMax} are shown in red.`}`}
         right={<span className="text-[12px] text-muted">{settings.caseloadMax == null ? 'No target · capacity input' : `Max ${settings.caseloadMax}`}</span>}>
@@ -1002,7 +1001,7 @@ function EngagementPage(p) {
   const rc = v => <span className="inline-block w-7 rounded text-center num text-[12px] py-0.5" style={{ background: v === 0 ? '#F1F3F5' : v >= 3 ? '#E6F2E8' : '#FDF1DC', color: v === 0 ? '#9AA4B0' : v >= 3 ? '#1F6B30' : '#8A5600' }}>{v === 0 ? 'NO' : v}</span>;
   return <div className="flex flex-col gap-4">
     <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
-      <Tile label="Teachers observed on all 3 engagement questions" value={nf(m.engDen)} sub={`${nf(m.engMet)} meeting the benchmark`} />
+      <Tile label="Teachers observed on all 3 engagement questions" value={`${nf(m.engDen)} (${f1(m.teachersObserved ? (100 * m.engDen) / m.teachersObserved : null)})`} sub={`of ${nf(m.teachersObserved)} teachers observed in the period · ${nf(m.engMet)} meeting the benchmark`} />
       <Tile label="Teachers meeting student engagement benchmark" value={f1(m.eng)} status={st.eng} sub={<Delta cur={m.eng} prev={P && P.m.eng} label={prevLabel ? `vs ${prevLabel}` : ''} />} />
       {ENG_Q.map(k => <Tile key={k} label={`${Q_LABEL[k]} at benchmark`} value={f0(m.comp[k])} sub={`${nf(m.raw.compMet[k])} of ${nf(m.raw.compDen[k])} teachers`} />)}
     </div>
