@@ -477,9 +477,16 @@
       banner.style.display = on ? 'block' : 'none';
       renderFab();
     }
+    // Skip the kit itself and overlays injected by browser extensions (custom elements such as <grammarly-popups>).
     function pointTarget(e) {
-      var el = document.elementFromPoint(e.clientX, e.clientY);
-      return el && !isOwn(el) ? el : null;
+      var els = document.elementsFromPoint(e.clientX, e.clientY);
+      for (var i = 0; i < els.length; i++) {
+        var el = els[i];
+        if (isOwn(el) || el === document.documentElement) continue;
+        if (el.localName.indexOf('-') > 0 && !(el.closest && el.closest('#root'))) continue;
+        return el;
+      }
+      return null;
     }
     function fromKit(e) {
       var path = e.composedPath ? e.composedPath() : [];

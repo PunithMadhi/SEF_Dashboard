@@ -18,9 +18,11 @@ window.reviewKitAdapter = (function () {
       pages: { home: 'Dashboard', todo: 'Visits', practice: 'Practice', engagement: 'Students', history: 'Teachers' } },
   };
 
+  // Netlify serves pretty URLs (e.g. /sparc_district_dashboard_new), so compare case-insensitively without .html.
+  function base(name) { return decodeURIComponent(name || '').toLowerCase().replace(/\.html?$/, ''); }
   function current() {
-    var file = location.pathname.split('/').pop();
-    for (var k in DASHBOARDS) if (DASHBOARDS[k].file === file) return k;
+    var file = base(location.pathname.split('/').pop());
+    for (var k in DASHBOARDS) if (base(DASHBOARDS[k].file) === file) return k;
     return 'state'; // the site root (/) serves the State dashboard
   }
 
