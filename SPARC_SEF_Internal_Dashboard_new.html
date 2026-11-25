@@ -453,11 +453,11 @@ function Gauge({ v, max, label, mark }) {
   </svg>;
 }
 const hiQ = m => COMP_Q.reduce((b, q) => ((m.comp[q] ?? -1) > (m.comp[b] ?? -1) ? q : b), COMP_Q[0]);
-function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status, delta, foot, onClick, progress, gauge }) {
+function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status, delta, foot, onClick, progress, gauge, info }) {
   const tip = [achievement && achievement !== '—' ? `Achievement: ${achievement}` : null, foot].filter(Boolean).join(' · ');
-  if (gauge) return <button type="button" onClick={onClick} title={tip || undefined}
-    className="text-center rounded-2xl p-4 pt-5 flex flex-col items-center gap-2 min-w-0 transition-shadow hover:shadow-md" style={{ background: gauge.tint }}>
-    <span className="text-[14px] font-semibold text-ink leading-tight">{title}</span>
+  if (gauge) return <div role="button" tabIndex={0} onClick={onClick} onKeyDown={e => { if (onClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }} title={tip || undefined}
+    className="text-center rounded-2xl p-4 pt-5 flex flex-col items-center gap-2 min-w-0 transition-shadow hover:shadow-md cursor-pointer" style={{ background: gauge.tint }}>
+    <span className="text-[14px] font-semibold text-ink leading-tight inline-flex items-center gap-1">{title}<InfoTip text={info} /></span>
     {gauge.custom ? <div className="w-full mt-1 flex flex-col items-center gap-2"><span className="font-cond text-[28px] leading-none font-bold text-ink num">{value}</span>{gauge.custom}</div>
     : <div className="relative w-full mt-1">
       <Gauge v={gauge.v} max={gauge.max} mark={gauge.mark} label={`${title}: ${value}`} />
@@ -465,7 +465,7 @@ function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status
     </div>}
     {sub && <div className="text-[12.5px] text-ink font-medium leading-snug">{sub}</div>}
     {unitNote && <div className="text-[11.5px] text-muted -mt-1">{unitNote}</div>}
-  </button>;
+  </div>;
   return <button type="button" onClick={onClick} title={tip || undefined}
     className="text-left bg-white border border-line rounded-lg p-4 hover:border-[#9CC9CC] hover:shadow-sm transition-shadow flex flex-col gap-2.5 min-w-0">
     <div className="flex items-start justify-between gap-2"><span className="text-[12.5px] font-medium text-muted leading-tight">{title}</span><StatusDot status={status} /></div>
@@ -868,8 +868,8 @@ const DistLegend = () => <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11
 
 const lvlLabel = l => (l === 'district' ? 'District' : l === 'block' ? 'Block' : 'Coach');
 const LW = l => (l === 'district' ? 120 : l === 'block' ? 70 : 110);
-function Tile({ label, value, sub, status }) {
-  return <div className="bg-white border border-line rounded-lg px-4 py-3 min-w-0"><div className="flex items-center justify-between gap-2 text-[12px] text-muted">{label}{status && <StatusDot status={status} />}</div>
+function Tile({ label, value, sub, status, info }) {
+  return <div className="bg-white border border-line rounded-lg px-4 py-3 min-w-0"><div className="flex items-center justify-between gap-2 text-[12px] text-muted"><span className="inline-flex items-center gap-1">{label}<InfoTip text={info} /></span>{status && <StatusDot status={status} />}</div>
     <div className="font-cond text-[24px] font-semibold text-ink num leading-tight mt-1">{value}</div>{sub && <div className="text-[11.5px] text-muted">{sub}</div>}</div>;
 }
 function Search({ id, value, onChange, placeholder }) {
@@ -912,7 +912,7 @@ function OverviewPage(p) {
     { k: 'sef', label: 'SEF vs coach', short: 'SEF agreement', dot: '#7A5BA6', tl: settings.sefTarget == null ? 'Ideal 70% · target after pilot' : `Target ${settings.sefTarget}%`, info: `${KPI.sef.formula} ${KPI.sef.action}`, target: p.sefT,
       rate: r => (r.sef.n ? r.sef.rate : null), status: r => r.st.sef, cols: [{ label: 'Co-obs', get: r => nf(r.sef.co) }, { label: 'Agreement', main: true }] },
   ];
-  const legend = (w) => <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted mt-1"><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.green.bar }} />At or above {complete || w ? 'target' : 'pace'}</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.amber.bar }} />Slightly behind</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.red.bar }} />Further behind</span><span>· Lowest first · click a column to drill down</span></div>;
+  const legend = (w) => <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted mt-1"><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.green.bar }} />At or above {complete || w ? 'target' : 'expected'}</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.amber.bar }} />Slightly behind</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.red.bar }} />Further behind</span><span>· Lowest first · click a column to drill down</span></div>;
   return <div className="flex flex-col gap-5">
     <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
       <KpiCard title="Teacher coverage" value={f1(S.cov)} status={st.cov} gauge={{ v: S.cov, max: 100, tint: '#D9F0F1' }} onClick={() => go('coverage')} sub={<><b className="text-ink num">{nf(S.m.teachersObserved)}</b> of <b className="text-ink num">{nf(S.m.teachersAllotted)}</b> allotted teachers observed</>} targetLabel={complete ? '100%' : `pace ${f0(pace)}`} delta={<Delta cur={S.cov} prev={P && P.cov} label={vs} />} />
@@ -920,7 +920,7 @@ function OverviewPage(p) {
       <KpiCard title="Competency benchmark" value={S.m.compLow ? f1(S.m.compLow.v) : '—'} status={st.comp} gauge={{ v: S.m.compLow ? S.m.compLow.v : null, max: 100, tint: '#DCE6F7' }} onClick={() => go('competency')} sub={S.m.compLow ? <>Lowest: {Q_LABEL[S.m.compLow.q]} ({f0(S.m.compLow.v)}) · Highest: {Q_LABEL[hiQ(S.m)]} ({f0(S.m.compMax)})</> : 'No valid observations'} targetLabel={t == null ? 'X%' : `${t}%`} delta={<Delta cur={S.m.compLow && S.m.compLow.v} prev={P && P.m.compLow && P.m.compLow.v} label={vs} />} />
       <KpiCard title="Student engagement" value={f1(S.m.eng)} status={st.eng} gauge={{ v: S.m.eng, max: 100, tint: '#FBE6D6' }} onClick={() => go('engagement')} sub={<><b className="text-ink num">{nf(S.m.engMet)}</b> of <b className="text-ink num">{nf(S.m.engDen)}</b> observed teachers met the benchmark on at least 2 of the 3 student engagement questions</>} targetLabel={te == null ? 'X%' : `${te}%`} delta={<Delta cur={S.m.eng} prev={P && P.m.eng} label={vs} />} />
       <KpiCard title="Teachers per coach" value={S.load == null ? '—' : Math.round(S.load)} unitNote="average caseload" gauge={{ v: S.load, max: Math.max(50, Math.ceil((S.load || 0) / 10) * 10), mark: settings.caseloadMax, tint: '#DFF1E3' }} status={settings.caseloadMax != null && S.load > settings.caseloadMax ? 'red' : 'grey'} onClick={() => go('coverage')} sub={<><b className="text-ink num">{nf(S.coaches)}</b> active coaches · {nf(S.m.distAllotted)} allotted teachers</>} targetLabel="capacity input" delta={null} />
-      <KpiCard title="Coaches with no observation in 14 days" value={nf(S.idle)} unitNote={`of ${nf(S.elig)} (${f1(S.idlePct)})`} status={st.idle} gauge={{ v: S.idle, max: Math.max(1, S.elig), tint: '#E6E1F4' }} targetLabel={`0 (≤${settings.inactiveThreshold})`} delta={null} />
+      <KpiCard title="Coaches with no observation in 14 days" info={`Counts coaches who have not submitted any observation form in the 14 days up to today. Only coaches who have been in the programme for at least 14 days, and have not left, are counted; this is the \u201cof\u201d number. New joiners are left out until they complete 14 days. The period filter does not change this card; it always shows the latest 14 days. Up to ${settings.inactiveThreshold} idle coaches are allowed in the first six months, and none after that.`} value={nf(S.idle)} unitNote={`of ${nf(S.elig)} (${f1(S.idlePct)})`} status={st.idle} gauge={{ v: S.idle, max: Math.max(1, S.elig), tint: '#E6E1F4' }} targetLabel={`0 (≤${settings.inactiveThreshold})`} delta={null} />
       <KpiCard title="Change in competency (Q1–Q8)" value={S.chg ? sgn(S.chg.mean) : '—'} unitNote="mean levels" status={st.chg} gauge={{ tint: '#FBF0D3', custom: S.chg ? <SplitBar parts={[{ label: 'improved', v: S.chg.up, color: '#7BA3D4' }, { label: 'same', v: S.chg.same, color: '#C3CBD5' }, { label: 'declined', v: S.chg.down, color: '#E0A9B3' }]} /> : null }} sub={S.chg ? <><b className="text-ink num">{nf(S.chg.n)}</b> matched ratings</> : 'No matched ratings'} targetLabel="No target" delta={null} />
       <KpiCard title="SEF vs coach agreement" value={S.sef.n ? f1(S.sef.rate) : '—'} status={st.sef} gauge={{ v: S.sef.n ? S.sef.rate : null, max: 100, mark: settings.sefTarget == null ? SEF_IDEAL : settings.sefTarget, tint: '#F1EADF' }} sub={<>% of ratings where SEF and coach agreed · <b className="text-ink num">{nf(S.sef.co)}</b> co-observations · <span className="inline-block w-[3px] h-3 rounded-full bg-ink align-[-1px] mr-1" /> ideal {settings.sefTarget == null ? SEF_IDEAL : settings.sefTarget}%</>} targetLabel={settings.sefTarget == null ? 'ideal 70%' : `${settings.sefTarget}%`} delta={<Delta cur={S.sef.n ? S.sef.rate : null} prev={P && P.sef.n ? P.sef.rate : null} label={vs} />} />
     </div>
@@ -952,10 +952,10 @@ function CoveragePage(p) {
   const covSt = v => hb(v, pace, settings.band);
   return <div className="flex flex-col gap-4">
     <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-      <Tile label={`Teacher coverage (${settings.covMethod === 'avg' ? 'averaged across coaches' : 'all teachers combined'})`} value={f1(S.cov)} status={st.cov} sub={<Delta cur={S.cov} prev={P && P.cov} label={prevLabel ? `vs ${prevLabel}` : ''} />} />
-      <Tile label="Teachers observed" value={`${nf(S.m.teachersObserved)} / ${nf(S.m.teachersAllotted)}`} sub={`${nf(S.m.teachersAllotted - S.m.teachersObserved)} not yet observed`} />
-      <Tile label="Average caseload" value={avg == null ? '—' : avg.toFixed(0)} sub={loads.length ? `teachers per coach · range ${Math.min(...loads)}–${Math.max(...loads)}` : ''} />
-      <Tile label="Coaches behind expected" value={`${coaches.filter(x => x.cov != null && x.cov < pace - settings.band).length} of ${coaches.length}`} sub={`more than ${settings.band} points behind ${complete ? 'target' : `the expected ${f0(pace)} for today`}`} />
+      <Tile label={`Teacher coverage (${settings.covMethod === 'avg' ? 'averaged across coaches' : 'all teachers combined'})`} value={f1(S.cov)} status={st.cov} info={`${settings.covMethod === 'avg' ? 'Each coach’s coverage is the % of their allotted teachers who had at least one observation in the selected period. This card is the average of those coach percentages; for example, one coach at 40% and another at 60% gives 50%.' : 'All allotted teachers in scope who had at least one observation in the selected period ÷ all allotted teachers in scope. Every teacher counts equally, whichever coach they belong to.'} Coverage is on track when it is at least the share of the quarter that has passed (${f0(pace)} today); by the end of the quarter the target is 100%.`} sub={<Delta cur={S.cov} prev={P && P.cov} label={prevLabel ? `vs ${prevLabel}` : ''} />} />
+      <Tile label="Teachers observed" value={`${nf(S.m.teachersObserved)} / ${nf(S.m.teachersAllotted)}`} info="Teachers with at least one submitted observation form in the selected period, out of all teachers allotted to coaches. Each teacher counts once, however many times they were observed. Only teachers of coaches active in the period are included. The line below shows how many are not yet observed." sub={`${nf(S.m.teachersAllotted - S.m.teachersObserved)} not yet observed`} />
+      <Tile label="Average caseload" info="Average number of teachers allotted to each coach in scope. The range shows the smallest and largest caseload among those coaches." value={avg == null ? '—' : avg.toFixed(0)} sub={loads.length ? `teachers per coach · range ${Math.min(...loads)}–${Math.max(...loads)}` : ''} />
+      <Tile label="Coaches behind expected" info={`Coaches whose own teacher coverage is more than ${settings.band} points below ${complete ? 'the 100% target' : `the expected ${f0(pace)} for today, which is the share of the quarter that has passed`}. The coach table below lists each coach’s coverage.`} value={`${coaches.filter(x => x.cov != null && x.cov < pace - settings.band).length} of ${coaches.length}`} sub={`more than ${settings.band} points behind ${complete ? 'target' : `the expected ${f0(pace)} for today`}`} />
     </div>
     <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
       <Panel title={`Coverage by ${lvl}`} formula={`${KPI.cov.formula} ${KPI.cov.action}`}
