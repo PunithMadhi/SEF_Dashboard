@@ -769,7 +769,7 @@ function HomePage(p) {
       <span className="flex-1 min-w-0"><span className="block text-[12px] text-muted">Student engagement benchmark</span><span className="block text-[13.5px] text-ink"><b className="font-cond text-[20px] num">{f0(cd.eng)}</b> <span className="text-[11.5px] text-muted">{cd.engMet} of {cd.engT.length} teachers · target {te == null ? 'X%' : `${te}%`}</span></span></span>
       <Icon name="ChevronRight" size={17} className="text-muted" /></button>
     <SecTitle>Pace this quarter</SecTitle>
-    <MCard title="Coverage against pace" info={`Expected coverage = 100% × working days elapsed ÷ working days in the quarter (Monday–Saturday). Green at or above pace, orange within ${band} points, red further behind.`}>
+    <MCard title="Coverage vs expected by today" info={`Expected by today = the share of the quarter’s working days (Monday–Saturday) that have passed. If 44% of working days are gone, 44% of your teachers should be observed to reach 100% by quarter end. Green: at or above expected; orange: up to ${band} points behind; red: further behind.`}>
       <div style={{ height: 180 }}><ResponsiveContainer width="100%" height="100%">
         <LineChart data={cd.series} margin={{ top: 6, right: 6, left: -22, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke={C.grid} />
