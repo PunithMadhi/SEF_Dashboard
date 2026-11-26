@@ -16,7 +16,7 @@ window.reviewKitAdapter = (function () {
       pages: { overview: 'Overview', coverage: 'Coverage & Caseload', competency: 'Teacher Competencies', engagement: 'Student Engagement' } },
     coach: { file: 'SPARC_Coach_View_new.html', role: 'Coach', title: 'Coach View',
       pages: { home: 'Dashboard', todo: 'Visits', practice: 'Practice', engagement: 'Students', history: 'Teachers' } },
-    usage: { file: 'SPARC_Usage_Report_v3_Prototype.html', role: 'Usage', title: 'Usage Report',
+    usage: { file: 'SPARC_Usage_Dashboard.html', role: 'Usage', title: 'Usage Dashboard',
       pages: { overview: 'Overview' } },
   };
 
