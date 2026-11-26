@@ -123,7 +123,13 @@ body{margin:0;background:var(--color-bg);color:var(--color-fg);font-family:var(-
   .sp-cbox { background: var(--color-panel); border-radius: 14px; padding: var(--cds-pad-md) var(--cds-pad-sm); display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
   .sp .sp-cbox b { font-size: clamp(18px, 2vw, 24px); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .sp-cbox > span { font-size: 13px; font-weight: 600; }
-  .sp-gauge { min-height: 150px; }
+  .sp-gauge { min-height: 118px; display: flex; align-items: center; }
+  .sp-bar-wrap { width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 4px 4px 0; }
+  .sp-bar-v { font-size: 28px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; color: var(--color-fg); line-height: 1; }
+  .sp-bar-u { font-size: 12px; font-weight: 400; color: var(--color-fg-muted); }
+  .sp-bar { height: 20px; border-radius: 999px; overflow: hidden; background: var(--sp-g2); }
+  .sp-bar > i { display: block; height: 100%; background: var(--sp-g1); }
+  .sp-bar-s { font-size: 13px; font-weight: 600; text-align: center; color: var(--color-fg); }
   .sp-roles { display: flex; justify-content: center; }
   .sp-role { font: inherit; font-size: 15px; padding: 10px 20px; background: var(--color-panel); color: var(--color-fg); border: 1px solid var(--sp-link); cursor: pointer; }
   .sp-role + .sp-role { border-left: 0; }
@@ -661,20 +667,16 @@ body{margin:0;background:var(--color-bg);color:var(--color-fg);font-family:var(-
     e.classList.remove('dash-skeleton');
     const gv = m === 'obs_per_coach' ? 'users_with_obs_pct' : m;
     const v = r[gv] ?? 0;
-    const W = Math.max(220, e.clientWidth || 300), H = 150;
-    const svg = d3.select(e).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).style('display', 'block').style('font-family', 'var(--font-anthropic-sans)');
-    const R = Math.min(W / 2 - 20, 100), cx = W / 2, cy = R + 10;
-    const arc = d3.arc().innerRadius(R * 0.62).outerRadius(R);
-    const a0 = -Math.PI / 2, a1 = Math.PI / 2, mid = a0 + (a1 - a0) * Math.max(0, Math.min(1, v));
-    const g = svg.append('g').attr('transform', `translate(${cx},${cy})`);
-    g.append('path').attr('d', arc({ startAngle: a0, endAngle: mid })).style('fill', 'var(--sp-g1)');
-    g.append('path').attr('d', arc({ startAngle: mid, endAngle: a1 })).style('fill', 'var(--sp-g2)');
-    const t = g.append('text').attr('text-anchor', 'middle').attr('y', m === 'obs_per_coach' ? -16 : -6).style('font-size', '26px').style('font-weight', 700).style('fill', 'var(--color-fg)');
-    t.append(() => { const sp = document.createElementNS('http://www.w3.org/2000/svg', 'tspan'); sp.textContent = r[m] === null || r[m] === undefined ? '—' : fmt(m, r[m], true); return sp; });
+    const el = (t, c) => { const n = document.createElement(t); if (c) n.className = c; return n; };
+    const wrap = el('div', 'sp-bar-wrap');
+    const val = el('div', 'sp-bar-v'); val.textContent = r[m] === null || r[m] === undefined ? '—' : fmt(m, r[m], true);
+    if (m === 'obs_per_coach') { const u = el('span', 'sp-bar-u'); u.textContent = ' per coach'; val.append(u); }
+    const bar = el('div', 'sp-bar'); bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', e.closest('.sp-ccard')?.querySelector('h3')?.textContent + ': ' + val.textContent);
+    const fill = el('i'); fill.style.width = `${100 * Math.max(0, Math.min(1, v))}%`; bar.append(fill);
+    wrap.append(val, bar); e.append(wrap);
     const SUBG = { pending_rate: (x) => `${x.tiles_not_submitted} of ${x.tiles_due} tiles pending`, users_active_pct: (x) => `${x.users_active} of ${x.users_total} ${x.role === 'DRC' ? 'DRCs' : 'BRCs'} used the app`, school_coverage: (x) => `${x.schools_visited} of ${x.allotted_schools} schools visited`, same_day_clob: (x) => `${x.clob_same_day} of ${x.clob_started} same day`, same_day_other: (x) => `${x.other_same_day} of ${x.other_started} same day`, obs_per_coach: (x) => `${x.users_with_obs} of ${x.users_total} BRCs observed`, retention: (x) => (x.retention === null ? 'No earlier range of the same length to compare' : `${x.retained_users} of ${x.prev_active_users} stayed active`) };
     const sub = (SUBG[m] || SUBG.users_active_pct)(r);
-    if (m === 'obs_per_coach') svg.append('text').attr('x', cx).attr('y', cy - 1).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--color-fg-muted)').text('per coach');
-    svg.append('text').attr('x', cx).attr('y', cy + 24).attr('text-anchor', 'middle').style('font-size', W < 260 ? '12px' : '13px').style('font-weight', 600).style('fill', 'var(--color-fg)').text(sub);
+    const st = el('div', 'sp-bar-s'); st.textContent = sub; wrap.append(st);
   });
 
   const levelOf = () => 'District';

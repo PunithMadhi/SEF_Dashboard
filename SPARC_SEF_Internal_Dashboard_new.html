@@ -442,17 +442,12 @@ function Progress({ value, target, status }) {
    6. KPI CARDS — value, status, one line of context, target and change
    ========================================================================= */
 function Gauge({ v, max, label, mark }) {
-  const cx = 100, cy = 100, r = 72, sw = 36;
-  const fv = v == null ? 0 : Math.max(0, Math.min(1, v / max));
-  const pt = f => { const a = Math.PI * (1 - f); return `${(cx + r * Math.cos(a)).toFixed(2)} ${(cy - r * Math.sin(a)).toFixed(2)}`; };
-  const seg = (a, b) => `M${pt(a)} A${r} ${r} 0 0 1 ${pt(b)}`;
-  return <svg viewBox="0 0 200 104" className="w-full max-w-[210px] mx-auto block" role="img" aria-label={label}>
-    {v == null ? <path d={seg(0, 1)} fill="none" stroke="#D5DBE2" strokeWidth={sw} />
-      : <>{fv < 1 && <path d={seg(fv, 1)} fill="none" stroke="#E0A9B3" strokeWidth={sw} />}
-        {fv > 0 && <path d={seg(0, fv)} fill="none" stroke="#7BA3D4" strokeWidth={sw} />}</>}
-    {mark != null && (() => { const m = Math.max(0, Math.min(1, mark / max)), an = Math.PI * (1 - m), p = rr => `${(cx + rr * Math.cos(an)).toFixed(2)} ${(cy - rr * Math.sin(an)).toFixed(2)}`;
-      return <path d={`M${p(r - sw / 2 - 3)} L${p(r + sw / 2 + 3)}`} stroke={C.ink} strokeWidth="3" strokeLinecap="round" />; })()}
-  </svg>;
+  const pct = n => Math.max(0, Math.min(100, (100 * n) / max));
+  return <div className="relative w-full h-5" role="img" aria-label={label}>
+    <div className="absolute inset-0 rounded-full overflow-hidden flex" style={{ background: v == null ? '#D5DBE2' : '#E0A9B3' }}>
+      {v != null && <div className="h-full" style={{ width: `${pct(v)}%`, background: '#7BA3D4' }} />}</div>
+    {mark != null && <div className="absolute -top-1 -bottom-1 w-[3px] rounded-full" style={{ left: `calc(${pct(mark)}% - 1.5px)`, background: C.ink }} />}
+  </div>;
 }
 const hiQ = m => COMP_Q.reduce((b, q) => ((m.comp[q] ?? -1) > (m.comp[b] ?? -1) ? q : b), COMP_Q[0]);
 function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status, delta, foot, onClick, progress, gauge, info }) {
@@ -461,9 +456,10 @@ function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status
     className="text-center rounded-2xl p-4 pt-5 flex flex-col items-center gap-2 min-w-0 transition-shadow hover:shadow-md cursor-pointer" style={{ background: gauge.tint }}>
     <span className="text-[14px] font-semibold text-ink leading-tight inline-flex items-center gap-1">{title}<InfoTip text={info} /></span>
     {gauge.custom ? <div className="w-full mt-1 flex flex-col items-center gap-2"><span className="font-cond text-[28px] leading-none font-bold text-ink num">{value}</span>{gauge.custom}</div>
-    : <div className="relative w-full mt-1">
+    : <div className="w-full mt-1 h-[104px] flex flex-col justify-center gap-2.5">
+      <span className="font-cond text-[28px] leading-none font-bold text-ink num">{value}</span>
       <Gauge v={gauge.v} max={gauge.max} mark={gauge.mark} label={`${title}: ${value}`} />
-      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center"><span className="font-cond text-[28px] leading-none font-bold text-ink num">{value}</span></div>
+      {gauge.bar && <div className="flex justify-between text-[11.5px] text-muted">{gauge.bar}</div>}
     </div>}
     {sub && <div className="text-[12.5px] text-ink font-medium leading-snug">{sub}</div>}
     {unitNote && <div className="text-[11.5px] text-muted -mt-1">{unitNote}</div>}
@@ -917,7 +913,9 @@ function OverviewPage(p) {
   const legend = (w) => <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted mt-1"><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.green.bar }} />At or above {complete || w ? 'target' : 'expected'}</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.amber.bar }} />Slightly behind</span><span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS.red.bar }} />Further behind</span><span>· Lowest first · click a column to drill down</span></div>;
   return <div className="flex flex-col gap-5">
     <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-      <KpiCard title="Teacher coverage" value={f1(S.cov)} status={st.cov} gauge={{ v: S.cov, max: 100, tint: '#D9F0F1' }} onClick={() => go('coverage')} sub={<><b className="text-ink num">{nf(S.m.teachersObserved)}</b> of <b className="text-ink num">{nf(S.m.teachersAllotted)}</b> allotted teachers observed</>} targetLabel={complete ? '100%' : `pace ${f0(pace)}`} delta={<Delta cur={S.cov} prev={P && P.cov} label={vs} />} />
+      <KpiCard title="Teacher coverage" value={f1(S.cov)} status={st.cov} onClick={() => go('coverage')}
+        gauge={{ v: S.m.teachersObserved, max: Math.max(1, S.m.teachersAllotted), tint: '#D9F0F1', bar: <><span><b className="text-ink num">{nf(S.m.teachersObserved)}</b> observed</span><span>{nf(S.m.teachersAllotted)} allotted</span></> }}
+        sub={<><b className="num">{nf(S.m.teachersAllotted - S.m.teachersObserved)}</b> teachers not yet observed</>} targetLabel={complete ? '100%' : `pace ${f0(pace)}`} delta={<Delta cur={S.cov} prev={P && P.cov} label={vs} />} />
       <KpiCard title="Observations per teacher" value={S.fyMean == null ? '—' : S.fyMean.toFixed(2)} status={st.dist} gauge={{ v: S.fyMean, max: Math.max(settings.annualTarget, Math.ceil(S.fyMean || 0)), tint: '#F2DADB' }} sub={<>Average observations per teacher this financial year · {f0(S.m.distAllotted ? (100 * S.m.dist[0]) / S.m.distAllotted : null)} of teachers had no observation in the selected period</>} targetLabel={`${settings.annualTarget}/yr · pace ${fyPace.toFixed(1)}`} delta={null} />
       <KpiCard title="Competency benchmark" value={S.m.compLow ? f1(S.m.compLow.v) : '—'} status={st.comp} gauge={{ v: S.m.compLow ? S.m.compLow.v : null, max: 100, tint: '#DCE6F7' }} onClick={() => go('competency')} sub={S.m.compLow ? <>Lowest: {Q_LABEL[S.m.compLow.q]} ({f0(S.m.compLow.v)}) · Highest: {Q_LABEL[hiQ(S.m)]} ({f0(S.m.compMax)})</> : 'No valid observations'} targetLabel={t == null ? 'X%' : `${t}%`} delta={<Delta cur={S.m.compLow && S.m.compLow.v} prev={P && P.m.compLow && P.m.compLow.v} label={vs} />} />
       <KpiCard title="Student engagement" value={f1(S.m.eng)} status={st.eng} gauge={{ v: S.m.eng, max: 100, tint: '#FBE6D6' }} onClick={() => go('engagement')} sub={<><b className="text-ink num">{nf(S.m.engMet)}</b> of <b className="text-ink num">{nf(S.m.engDen)}</b> observed teachers met the benchmark on at least 2 of the 3 student engagement questions</>} targetLabel={te == null ? 'X%' : `${te}%`} delta={<Delta cur={S.m.eng} prev={P && P.m.eng} label={vs} />} />

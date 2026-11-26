@@ -441,16 +441,13 @@ function Progress({ value, target, status }) {
 /* =========================================================================
    6. KPI CARDS — value, status, one line of context, target and change
    ========================================================================= */
-function Gauge({ v, max, label }) {
-  const cx = 100, cy = 100, r = 72, sw = 36;
-  const fv = v == null ? 0 : Math.max(0, Math.min(1, v / max));
-  const pt = f => { const a = Math.PI * (1 - f); return `${(cx + r * Math.cos(a)).toFixed(2)} ${(cy - r * Math.sin(a)).toFixed(2)}`; };
-  const seg = (a, b) => `M${pt(a)} A${r} ${r} 0 0 1 ${pt(b)}`;
-  return <svg viewBox="0 0 200 104" className="w-full max-w-[210px] mx-auto block" role="img" aria-label={label}>
-    {v == null ? <path d={seg(0, 1)} fill="none" stroke="#D5DBE2" strokeWidth={sw} />
-      : <>{fv < 1 && <path d={seg(fv, 1)} fill="none" stroke="#E0A9B3" strokeWidth={sw} />}
-        {fv > 0 && <path d={seg(0, fv)} fill="none" stroke="#7BA3D4" strokeWidth={sw} />}</>}
-  </svg>;
+function Gauge({ v, max, label, mark }) {
+  const pct = n => Math.max(0, Math.min(100, (100 * n) / max));
+  return <div className="relative w-full h-5" role="img" aria-label={label}>
+    <div className="absolute inset-0 rounded-full overflow-hidden flex" style={{ background: v == null ? '#D5DBE2' : '#E0A9B3' }}>
+      {v != null && <div className="h-full" style={{ width: `${pct(v)}%`, background: '#7BA3D4' }} />}</div>
+    {mark != null && <div className="absolute -top-1 -bottom-1 w-[3px] rounded-full" style={{ left: `calc(${pct(mark)}% - 1.5px)`, background: C.ink }} />}
+  </div>;
 }
 const hiQ = m => COMP_Q.reduce((b, q) => ((m.comp[q] ?? -1) > (m.comp[b] ?? -1) ? q : b), COMP_Q[0]);
 function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status, delta, foot, onClick, progress, gauge, info }) {
@@ -458,15 +455,11 @@ function KpiCard({ title, value, unitNote, sub, targetLabel, achievement, status
   if (gauge) return <div role="button" tabIndex={0} onClick={onClick} onKeyDown={e => { if (onClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }} title={tip || undefined}
     className="text-center rounded-2xl p-4 pt-5 flex flex-col items-center gap-2 min-w-0 transition-shadow hover:shadow-md cursor-pointer" style={{ background: gauge.tint }}>
     <span className="text-[14px] font-semibold text-ink leading-tight inline-flex items-center gap-1">{title}<InfoTip text={info} /></span>
-    {gauge.bar ? <div className="w-full mt-1 h-[104px] flex flex-col justify-center gap-2.5">
+    <div className="w-full mt-1 h-[104px] flex flex-col justify-center gap-2.5">
       <span className="font-cond text-[28px] leading-none font-bold text-ink num">{value}</span>
-      <div className="w-full h-5 rounded-full overflow-hidden flex" role="img" aria-label={`${title}: ${value}`} style={{ background: gauge.v == null ? '#D5DBE2' : '#E0A9B3' }}>
-        {gauge.v != null && <div className="h-full" style={{ width: `${Math.max(0, Math.min(100, (100 * gauge.v) / gauge.max))}%`, background: '#7BA3D4' }} />}</div>
-      {gauge.bar !== true && <div className="flex justify-between text-[11.5px] text-muted">{gauge.bar}</div>}
-    </div> : <div className="relative w-full mt-1">
-      <Gauge v={gauge.v} max={gauge.max} label={`${title}: ${value}`} />
-      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center"><span className="font-cond text-[28px] leading-none font-bold text-ink num">{value}</span></div>
-    </div>}
+      <Gauge v={gauge.v} max={gauge.max} mark={gauge.mark} label={`${title}: ${value}`} />
+      {gauge.bar && <div className="flex justify-between text-[11.5px] text-muted">{gauge.bar}</div>}
+    </div>
     {sub && <div className="text-[12.5px] text-ink font-medium leading-snug">{sub}</div>}
     {unitNote && <div className="text-[11.5px] text-muted -mt-1">{unitNote}</div>}
   </div>;
