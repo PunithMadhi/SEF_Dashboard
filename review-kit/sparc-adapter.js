@@ -16,6 +16,8 @@ window.reviewKitAdapter = (function () {
       pages: { overview: 'Overview', coverage: 'Coverage & Caseload', competency: 'Teacher Competencies', engagement: 'Student Engagement' } },
     coach: { file: 'SPARC_Coach_View_new.html', role: 'Coach', title: 'Coach View',
       pages: { home: 'Dashboard', todo: 'Visits', practice: 'Practice', engagement: 'Students', history: 'Teachers' } },
+    usage: { file: 'SPARC_Usage_Report_v3_Prototype.html', role: 'Usage', title: 'Usage Report',
+      pages: { overview: 'Overview' } },
   };
 
   // Netlify serves pretty URLs (e.g. /sparc_district_dashboard_new), so compare case-insensitively without .html.
